@@ -43,6 +43,19 @@ class RedKGReader:
             engagement,
         )
 
+    # attack ground-truth for scoring: the FULL Finding property bag + reachable hosts, so the
+    # coordinator can extract (technique, entity, ts) regardless of which property Decepticon stamps
+    # the MITRE technique / timestamp onto. The KG — not events.jsonl — is where the technique lives
+    # (the disk finding.created payload is only {"tool": ...}, plan 05 §5). `properties(f)` returns
+    # the whole node as a map; `scoring.kg_attacks` does the schema-defensive extraction.
+    def attack_events(self, engagement: str) -> list[dict]:
+        return self._read(
+            "MATCH (f:Finding) WHERE f.engagement=$engagement "
+            "OPTIONAL MATCH (f)<-[:REACHES|LEADS_TO*0..2]-(h:Host) "
+            "RETURN properties(f) AS finding, collect(DISTINCT h.key) AS hosts",
+            engagement,
+        )
+
     # blue_cell ground truth: DetectionFired -[:DETECTED]-> t, -[:USES_RULE]-> rule
     def detection_coverage(self, engagement: str) -> list[dict]:
         return self._read(

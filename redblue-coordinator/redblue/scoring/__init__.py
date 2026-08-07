@@ -4,9 +4,9 @@ Correlation itself lives in contracts.correlation (the schema-level join); this 
 coordinator-side honesty layer (coverage oracle) and the pure engine/sensor → tuple extractors.
 """
 from .coverage import StaticCoverageOracle, apply_coverage
-from .extract import events_to_attacks, findings_to_detections
+from .extract import events_to_attacks, findings_to_detections, kg_attacks
 
 __all__ = [
     "StaticCoverageOracle", "apply_coverage",
-    "events_to_attacks", "findings_to_detections",
+    "events_to_attacks", "findings_to_detections", "kg_attacks",
 ]

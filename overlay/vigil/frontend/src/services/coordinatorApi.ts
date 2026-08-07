@@ -1,7 +1,7 @@
 // RedBlue coordinator API client (plan 09 §1.2) — ADDITIVE overlay.
 // Single-origin: hits Vigil's `/api/coordinator/*` reverse-proxy (backend/api/coordinator_proxy.py),
 // so it inherits the shared axios instance's cookie+CSRF auth. Mirrors the `orchestratorApi` shape.
-import { api } from './api'
+import api from './api'
 
 export interface Scorecard {
   scorecard_id: string; engagement_id: string; tenant_id: string; version: number

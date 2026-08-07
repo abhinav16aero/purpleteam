@@ -1,0 +1,50 @@
+diff --git a/frontend/src/redesign/data/data.ts b/frontend/src/redesign/data/data.ts
+--- a/frontend/src/redesign/data/data.ts
++++ b/frontend/src/redesign/data/data.ts
+@@ -13,6 +13,8 @@
+   | 'decisions'
+   | 'workflows'
+   | 'autoops'
++  | 'posture'
++  | 'engagements'
+   | 'settings'
+ 
+ /** Runtime-dynamic rail membership, mirroring production's NavigationRail.
+@@ -39,6 +41,8 @@
+   ['brain', 'AI Decisions', 'decisions'],
+   ['flow', 'Workflows & Skills', 'workflows'],
+   ['bot', 'Auto Ops', 'autoops'],
++  ['shield', 'RedBlue Posture', 'posture'],
++  ['bolt', 'Engagements', 'engagements'],
+   ['gear', 'Settings', 'settings'],
+ ]
+ 
+@@ -93,5 +97,7 @@
+   decisions: ['AI Decisions', 'Review and provide feedback for AI decisions'],
+   workflows: ['Workflows & Skills', 'Pre-built multi-agent workflows for common SOC operations'],
+   autoops: ['Auto Ops', 'Autonomous operations — master orchestrator and sub-agent investigations'],
++  posture: ['RedBlue Posture', 'Attacked-vs-detected coverage, MTTD and false-negative gaps'],
++  engagements: ['Engagements', 'Launch and monitor scoped red-team engagements'],
+   settings: ['Settings', 'Configure Vigil — AI, integrations, users and platform'],
+ }
+diff --git a/frontend/src/redesign/SocConsole.tsx b/frontend/src/redesign/SocConsole.tsx
+--- a/frontend/src/redesign/SocConsole.tsx
++++ b/frontend/src/redesign/SocConsole.tsx
+@@ -30,6 +30,8 @@
+ import AutoOpsScreen from './screens/autoops/AutoOpsScreen'
+ import SettingsScreen from './screens/settings/SettingsScreen'
+ import NotFoundScreen from './screens/notfound/NotFoundScreen'
++import PostureScreen from './screens/posture/PostureScreen'
++import EngagementsScreen from './screens/engagements/EngagementsScreen'
+ import { VigilMark, VigilLogo } from './shared/VigilLogo'
+ 
+ const SCREENS: Record<ScreenKey, (props: ScreenProps) => JSX.Element> = {
+@@ -40,6 +42,8 @@
+   decisions: DecisionsScreen,
+   workflows: WorkflowsScreen,
+   autoops: AutoOpsScreen,
++  posture: PostureScreen,
++  engagements: EngagementsScreen,
+   settings: SettingsScreen,
+ }
+ 

@@ -6,11 +6,14 @@ P4-live is hardware-deferred (see memory). Unit tests inject fakes instead (test
 """
 from __future__ import annotations
 
+import json
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 from ..config.settings import Settings
 from ..config.tenants import TenantPolicyRegistry
-from ..connectors import EventTail, RedDriver, VigilClient
+from ..connectors import EventTail, RedDriver, RedKGReader, VigilClient
 from ..evidence.store import EvidenceStore
 from ..governance import (
     AssetMap,
@@ -19,24 +22,42 @@ from ..governance import (
     PolicyEngine,
     default_response_planner,
 )
-from ..scoring import StaticCoverageOracle, events_to_attacks, findings_to_detections
+from ..scoring import StaticCoverageOracle, events_to_attacks, findings_to_detections, kg_attacks
 from .ports import Deps
+from .red_bridge import event_from_chunk
 
 
 class _ConnectorRed:
-    """RedRunner over the LangGraph :2024 driver. Drains the launch stream to a terminal red_run."""
+    """RedRunner over the LangGraph :2024 driver.
 
-    def __init__(self, driver: RedDriver) -> None:
+    Drains the run stream to completion AND bridges it to a coordinator-local `events.jsonl` at the
+    path `_EventsAttackSource` reads (`{workspace}/events.jsonl`), so the red-action timeline is
+    captured even when Decepticon's own events volume is not shared (red_bridge). Returns real
+    start/end timing for the scoring window instead of the previous no-op drain.
+    """
+
+    def __init__(self, driver: RedDriver, clock: Callable[[], float] = time.time) -> None:
         self._driver = driver
+        self._clock = clock
 
     async def launch(self, *, engagement, workspace, sandbox_url, tenant, instruction) -> dict:
-        async for _chunk in self._driver.launch(
-            engagement=engagement, workspace=workspace, sandbox_url=sandbox_url,
-            tenant=tenant, instruction=instruction,
-        ):
-            pass  # live impl bridges chunks → evidence/scorecard; MVP just drains to completion
+        events_path = Path(workspace) / "events.jsonl"
+        events_path.parent.mkdir(parents=True, exist_ok=True)
+        start = self._clock()
+        captured = 0
+        # truncate-per-launch so a re-run of the same engagement can't double-count captured events
+        with events_path.open("w", encoding="utf-8") as fh:
+            async for chunk in self._driver.launch(
+                engagement=engagement, workspace=workspace, sandbox_url=sandbox_url,
+                tenant=tenant, instruction=instruction,
+            ):
+                rec = event_from_chunk(chunk, self._clock())
+                if rec is not None:
+                    fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                    fh.flush()
+                    captured += 1
         return {"thread_id": engagement, "run_id": None, "status": "success",
-                "started_at": None, "ended_at": None}
+                "started_at": start, "ended_at": self._clock(), "events_captured": captured}
 
 
 class _EventsAttackSource:
@@ -49,6 +70,28 @@ class _EventsAttackSource:
         path = Path(self._root) / engagement / "events.jsonl"
         events = list(EventTail(path).poll())
         return events_to_attacks(events)
+
+
+class _KGAttackSource:
+    """Attack ground-truth from Decepticon's Neo4j KG — the real home of technique+target (§3.2).
+
+    Decepticon's disk `events.jsonl` carries only `{"tool": ...}` for a finding; the MITRE technique
+    and target live in the KG (plan 05 §5), so this is the source that makes a live scorecard show
+    non-zero `attacked`. `default_ts` = the engagement-window start, used for MTTD when Finding nodes
+    carry no timestamp of their own. A read failure degrades to `[]` (never raises into the loop) —
+    a KG hiccup must not abort scoring; the scorecard then honestly reports 0 attacked.
+    """
+
+    def __init__(self, reader: RedKGReader) -> None:
+        self._reader = reader
+
+    def attacks(self, engagement: str, window: dict) -> list[dict]:
+        try:
+            rows = self._reader.attack_events(engagement)
+        except Exception:  # noqa: BLE001 — transient KG/driver errors must not abort the engagement
+            return []
+        t0 = (window or {}).get("t_start") or 0.0
+        return kg_attacks(rows, default_ts=float(t0))
 
 
 class _VigilDetectionSource:
@@ -83,9 +126,18 @@ def build_live_deps(settings: Settings | None = None) -> Deps:
     # AI-native defense ON by default (plan 08 §6): the sovereign heuristic scanner. Point at the real
     # vigil-llm service by passing VigilLlmHttpScanner(s.vigil_llm_url) once it's deployed (§6.2).
     shield = InjectionShield()
+    # Attack ground-truth: prefer the Neo4j KG (where Decepticon records technique+target) when a
+    # password is configured; otherwise fall back to the events.jsonl capture (red clock only —
+    # techniques need the KG, plan 05 §5).
+    if s.decepticon_neo4j_password:
+        attack_source = _KGAttackSource(RedKGReader(
+            s.decepticon_neo4j_uri, s.decepticon_neo4j_user,
+            s.decepticon_neo4j_password, s.decepticon_neo4j_database))
+    else:
+        attack_source = _EventsAttackSource()
     return Deps(
         red=_ConnectorRed(RedDriver(s.langgraph_url)),
-        attack_source=_EventsAttackSource(),
+        attack_source=attack_source,
         detection_source=_VigilDetectionSource(VigilClient(s.vigil_url, s.vigil_token or None)),
         coverage=StaticCoverageOracle(default=True),
         evidence=evidence,
