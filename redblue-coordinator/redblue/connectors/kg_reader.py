@@ -1,0 +1,61 @@
+"""Read-only, engagement-scoped reader for Decepticon's Neo4j attack graph (plan 06 §2).
+
+Every read MUST bind $engagement (Decepticon's KGStore enforces this server-side; we enforce it
+client-side too so a read can never span tenants). Read-only role; no annotate-back in v1 (§2.4).
+"""
+from __future__ import annotations
+
+from typing import Any
+
+import neo4j
+
+
+class ScopeError(ValueError):
+    """Raised when a KG read is not engagement-scoped."""
+
+
+def require_scoped(cypher: str) -> None:
+    if "$engagement" not in cypher:
+        raise ScopeError("every KG read must bind $engagement (tenant isolation)")
+
+
+class RedKGReader:
+    def __init__(self, uri: str, user: str, password: str, database: str = "neo4j"):
+        self._driver = neo4j.GraphDatabase.driver(uri, auth=(user, password))
+        self._db = database
+
+    def close(self) -> None:
+        self._driver.close()
+
+    def _read(self, cypher: str, engagement: str, **params: Any) -> list[dict]:
+        require_scoped(cypher)
+        with self._driver.session(database=self._db, default_access_mode=neo4j.READ_ACCESS) as s:
+            return s.execute_read(
+                lambda tx: [dict(r) for r in tx.run(cypher, engagement=engagement, **params)]
+            )
+
+    # what red actually touched (the detection denominator, plan 05 §4.5)
+    def attacked_surface(self, engagement: str) -> list[dict]:
+        return self._read(
+            "MATCH (f:Finding) WHERE f.engagement=$engagement "
+            "OPTIONAL MATCH (f)<-[:REACHES|LEADS_TO*0..2]-(h:Host) "
+            "RETURN f.key AS finding, f.label AS label, collect(DISTINCT h.key) AS hosts",
+            engagement,
+        )
+
+    # blue_cell ground truth: DetectionFired -[:DETECTED]-> t, -[:USES_RULE]-> rule
+    def detection_coverage(self, engagement: str) -> list[dict]:
+        return self._read(
+            "MATCH (d:DetectionFired)-[:DETECTED]->(t) WHERE d.engagement=$engagement "
+            "OPTIONAL MATCH (d)-[:USES_RULE]->(a) "
+            "RETURN t.key AS caught, d.key AS detection, a.label AS rule",
+            engagement,
+        )
+
+    # findings with NO inbound DETECTED edge = what red did that nothing caught
+    def detection_gaps(self, engagement: str) -> list[dict]:
+        return self._read(
+            "MATCH (f:Finding) WHERE f.engagement=$engagement "
+            "AND NOT (f)<-[:DETECTED]-(:DetectionFired) RETURN f.key AS undetected",
+            engagement,
+        )

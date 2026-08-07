@@ -1,0 +1,26 @@
+diff --git a/backend/main.py b/backend/main.py
+index 6524970..d245380 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -56,6 +56,7 @@ from api.ingestion import router as ingestion_router
+ from api.timeline import router as timeline_router
+ from api.graph import router as graph_router
+ from api.vstrike import router as vstrike_router
++from api.coordinator_proxy import router as coordinator_proxy_router  # RedBlue patch 0006
+ from api.extensions import router as extensions_router
+ from api.custom_agents import router as custom_agents_router
+ 
+@@ -343,6 +344,13 @@ app.include_router(
+ # VStrike /findings is public-but-bearer-authenticated inside the router.
+ # All VStrike management/UI/proxy routes require an authenticated user session.
+ app.include_router(vstrike_router, prefix=f"{_CONTEXT_PATH}/api/integrations/vstrike", tags=["vstrike"])
++# RedBlue patch 0006: single-origin reverse-proxy to the coordinator (:8900) for the unified console.
++app.include_router(
++    coordinator_proxy_router,
++    prefix=f"{_CONTEXT_PATH}/api/coordinator",
++    tags=["coordinator"],
++    dependencies=AUTH_DEPENDENCY,
++)
+ # Page-extension host — mints connector session tokens.
+ app.include_router(
+     extensions_router,

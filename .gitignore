@@ -1,0 +1,41 @@
+# ── RedBlue AI superproject .gitignore (plan 01 §6.3) ──
+# The three reused engines are REPRODUCED by setup.sh from manifest.toml — never committed here.
+/Decepticon/
+/vigil/
+/vigil-llm/
+
+# Python envs / build
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.egg-info/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Node
+**/node_modules/
+
+# Secrets / env (never commit; *.example IS committed)
+**/.env
+**/.env.*
+!**/.env.example
+!**/env.example
+deploy/.env
+
+# Runtime / evidence spill
+**/logs/
+**/.dogfood/
+**/workspace/
+telemetry/**/data/
+**/coordinator_data/
+*.pcap
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Claude Code local settings (per-user; never commit)
+.claude/settings.local.json

@@ -1,0 +1,32 @@
+# deploy/overrides/decepticon.redblue.yml — attach the 3 cross-stack endpoints to the bus.
+# Plan: plans/02_INFRA_COMPOSE_AND_PORTS.md §1.5
+#
+# Merged as (Makefile):
+#   docker compose -p decepticon --env-file deploy/env/decepticon.env \
+#     -f ../Decepticon/docker-compose.yml -f deploy/overrides/decepticon.redblue.yml up
+#
+# Compose merges service `networks:` lists ADDITIVELY, so we only APPEND redblue-shared;
+# each service keeps its private decepticon-net / sandbox-net. The Kali `sandbox` and
+# `c2-sliver` are deliberately NOT here — they stay isolated on sandbox-net (00 §5).
+# Host-port remaps (postgres 5433, web 3100, terminal 3103) are env-only (decepticon.env);
+# every Decepticon host port is ${VAR:-default}, so no port stanza is needed here.
+services:
+  litellm:
+    environment:
+      # LiteLLM's Ollama provider base → the shared container (doc 03 also sets this in
+      # config/litellm.yaml for the ollama_chat/* routes). Harmless if unused.
+      - OLLAMA_API_BASE=http://ollama:11434
+    networks:
+      - redblue-shared          # + decepticon-net
+
+  langgraph:
+    networks:
+      - redblue-shared          # + decepticon-net + sandbox-net  (coordinator drives :2024)
+
+  neo4j:
+    networks:
+      - redblue-shared          # + sandbox-net + decepticon-net  (coordinator reads the KG :7687)
+
+networks:
+  redblue-shared:
+    external: true

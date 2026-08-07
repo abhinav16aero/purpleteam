@@ -1,0 +1,13 @@
+{
+  "_comment": "MCP fragment (plan 06 §4.2). jq-merged into vigil/mcp-config.json by setup.sh (plan 01 §3.3). Disabled by default (not in MCPService._DEFAULT_ENABLED); enable only for the daemon/agents that should drive red. Its tool names carry offensive verbs → gated requires_approval by patch 0002.",
+  "mcpServers": {
+    "decepticon-driver": {
+      "command": "python3",
+      "args": ["tools/decepticon_driver.py"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "REDBLUE_LANGGRAPH_URL": "${REDBLUE_LANGGRAPH_URL}"
+      }
+    }
+  }
+}

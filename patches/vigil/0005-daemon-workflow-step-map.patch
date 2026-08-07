@@ -1,0 +1,38 @@
+diff --git a/daemon/plan_generator.py b/daemon/plan_generator.py
+index 2e36e2e..311920f 100644
+--- a/daemon/plan_generator.py
++++ b/daemon/plan_generator.py
+@@ -48,6 +48,19 @@ WORKFLOW_STEP_MAP = {
+         {"title": "Case Management", "description": "Check existing cases via list_cases; add findings to matching case or create new case; log IOCs, timeline, and MITRE techniques to the case"},
+         {"title": "Forensic Report", "description": "Detailed forensic report with evidence chain and conclusions"},
+     ],
++    # RedBlue patch 0005 (plan 06 §4.4): the purple-team workflow the autonomous orchestrator plans
++    # when a Decepticon-attributed finding lands. Its containment phase is gated (create_approval_action
++    # → the coordinator's tiered-autonomy policy decides auto/human/never), so red actions never drive
++    # an unapproved response.
++    "purple-team-response": [
++        {"title": "Red Activity Triage", "description": "Assess the Decepticon-attributed finding: technique, target, engagement scope"},
++        {"title": "Correlate Sensor Detections", "description": "Find independent sensor findings (Wazuh/Suricata/Falco) corroborating the red action; compute MTTD"},
++        {"title": "Map to MITRE ATT&CK", "description": "Map the technique, create an ATT&CK Navigator layer, flag detection-coverage gaps"},
++        {"title": "Gated Containment", "description": "Propose containment via create_approval_action; tenant-boundary/control-plane actions are never-auto and await human approval"},
++        {"title": "Detection Engineering", "description": "For each gap, recommend a Sigma/Suricata/Falco rule that would have caught the red action"},
++        {"title": "Case Management", "description": "Log the red action, corroborating detections, IOCs, timeline, and MITRE techniques to the case"},
++        {"title": "Purple-Team Report", "description": "Summarize attacked-vs-detected, MTTD/MTTR, coverage gaps, and recommended detections; submit for review"},
++    ],
+     "case-review": [
+         {"title": "Review Findings", "description": "Use get_case to load the case, then get_finding for each finding; review IOCs, timeline, and activities already logged"},
+         {"title": "Root Cause Analysis", "description": "Determine root cause from aggregated evidence across all findings; identify the initial access vector and attack chain"},
+@@ -73,7 +86,12 @@ def select_workflow(finding: Dict[str, Any]) -> str:
+     recommended = (finding.get("recommended_action") or "").lower()
+     category = (finding.get("category") or "").lower()
+     mitre = finding.get("mitre_predictions") or {}
+-    
++
++    # RedBlue patch 0005 (plan 06 §4.4): a Decepticon-attributed finding runs the purple-team workflow.
++    data_source = (finding.get("data_source") or "").lower()
++    if data_source == "decepticon" or category in ("red-team", "purple-team", "adversary-emulation"):
++        return "purple-team-response"
++
+     if recommended in ("isolate", "block") or severity == "critical":
+         return "incident-response"
+     

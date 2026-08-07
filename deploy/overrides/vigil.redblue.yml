@@ -1,0 +1,45 @@
+# deploy/overrides/vigil.redblue.yml — bus attach + port remap + SOVEREIGNTY (P1).
+# Plans: 02 §1.6 (bus/ports), 03 (local Ollama, zero egress).
+#
+# Merged as (Makefile):
+#   docker compose -p vigil --env-file deploy/env/vigil.env \
+#     -f ../vigil/docker/docker-compose.yml -f deploy/overrides/vigil.redblue.yml up
+#
+# OLLAMA_URL is set via --env-file vigil.env (interpolated into every ${OLLAMA_URL:-...}).
+# DEFAULT_MODEL is added here (base default is the CLOUD claude-sonnet-4-6 — the silent
+# fallback plan 03 flagged). Vigil host ports are hardcoded, so the daemon remap uses `!override`.
+services:
+  backend:
+    environment:
+      - DEFAULT_MODEL=ollama/qwen2.5-coder:7b   # override cloud default → local (plan 03)
+    networks:
+      - redblue-shared          # + deeptempo-network
+
+  soc-daemon:
+    environment:
+      - DEFAULT_MODEL=ollama/qwen2.5-coder:7b
+    ports: !override            # REPLACE the base list (host 8081 → 8082; internal stays 8081)
+      - "8082:8081"
+      - "9090:9090"
+      - "9091:9091"
+    networks:
+      - redblue-shared
+
+  llm-worker:
+    environment:
+      - DEFAULT_MODEL=ollama/qwen2.5-coder:7b
+    networks:
+      - redblue-shared          # LLM path (→ bifrost → ollama)
+
+  # STRIP cloud from Bifrost: mount the ollama-only sovereign seed. Bifrost then has no
+  # Anthropic/OpenAI provider to route to — the strongest blue-side zero-egress guarantee.
+  # The file is delivered by setup.sh's overlay copy (overlay/vigil/docker/bifrost/...).
+  bifrost:
+    volumes: !override
+      - ./bifrost/config.sovereign.json:/app/data/config.json:ro
+    networks:
+      - redblue-shared          # → ollama:11434
+
+networks:
+  redblue-shared:
+    external: true

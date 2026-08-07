@@ -1,0 +1,28 @@
+%YAML 1.1
+---
+# Minimal Suricata config for the RedBlue range (plan 04). HOME_NET = the range CIDR so
+# scan/ingress/egress direction logic is correct. Full ruleset via suricata-update at runtime.
+vars:
+  address-groups:
+    HOME_NET: "[10.20.0.0/24]"
+    EXTERNAL_NET: "!$HOME_NET"
+
+af-packet:
+  - interface: eth0            # the range-net interface inside the container
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+
+default-rule-path: /var/lib/suricata/rules
+rule-files:
+  - suricata.rules             # ET Open ruleset (suricata-update); keep SCAN/WEB_SERVER/MALWARE/EXPLOIT
+
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: /var/log/suricata/eve.json    # shipped into Wazuh by suricata.shipper
+      types:
+        - alert:
+            metadata: yes                       # carries mitre_technique_id → mitre_predictions
+        # flow/stats intentionally excluded (noise) — only alerts reach Vigil

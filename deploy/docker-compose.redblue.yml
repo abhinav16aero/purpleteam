@@ -1,0 +1,62 @@
+# deploy/docker-compose.redblue.yml — the SHARED plane (coordinator + one Ollama)
+# Plan: plans/02_INFRA_COMPOSE_AND_PORTS.md
+#
+# Run as its own Compose project:
+#   docker compose -p coordinator -f deploy/docker-compose.redblue.yml up
+# The engine stacks come up as their OWN projects (Makefile) and attach to the
+# `redblue-shared` external network via their override fragments. A single merged
+# project is impossible (both engines define a service named `postgres`).
+#
+# NOTE: the telemetry project (Wazuh/Suricata/Falco) is P2 — not `include`d here
+# yet, so this file renders cleanly today. It joins in plan 04.
+name: coordinator
+
+services:
+  # One local Ollama serves BOTH gateways (Decepticon LiteLLM :4000 + Vigil Bifrost :8080).
+  # Containerized on redblue-shared is canonical (00 §5 / doc 03): no host.docker.internal
+  # dependency on Linux; reachable everywhere as http://ollama:11434.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: redblue-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    networks: [redblue-shared]
+    # GPU reservation is doc-03 territory (uncomment on a GPU host):
+    # deploy: { resources: { reservations: { devices: [{ driver: nvidia, count: 1, capabilities: [gpu] }] } } }
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  # The coordinator (plan 07). Reaches the engines by service-name alias on redblue-shared:
+  #   langgraph:2024 · neo4j:7687 · backend:6987 · soc-daemon:8081 (internal) · ollama:11434
+  redblue-coordinator:
+    build:
+      context: ../redblue-coordinator
+      dockerfile: Dockerfile
+    container_name: redblue-coordinator
+    env_file:
+      - ./env/shared.env
+    ports:
+      - "8900:8900"     # API
+      - "8902:8902"     # /metrics (8901 reserved-unused — UI folds into Vigil console, doc 09)
+    volumes:
+      - coordinator_data:/data   # SQLite MVP store + hash-chained evidence (doc 08)
+    networks: [redblue-shared]
+    # No depends_on — langgraph/backend live in OTHER Compose projects. Ordering is
+    # Makefile-driven (--wait) and the coordinator retries with backoff (plan 07 §2.3).
+    restart: unless-stopped
+
+volumes:
+  ollama_models:
+  coordinator_data:
+
+networks:
+  # Created once by `make net`; shared (not project-prefixed) across all projects.
+  redblue-shared:
+    external: true

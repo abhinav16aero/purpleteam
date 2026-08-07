@@ -1,0 +1,52 @@
+diff --git a/database/init/13_approval_actions.sql b/database/init/13_approval_actions.sql
+index 4020804..8c94d03 100644
+--- a/database/init/13_approval_actions.sql
++++ b/database/init/13_approval_actions.sql
+@@ -17,6 +17,7 @@
+ 
+ CREATE TABLE IF NOT EXISTS approval_actions (
+     action_id           VARCHAR(80)  PRIMARY KEY,                  -- action-YYYYMMDD-HHMMSS-ffffff
++    tenant_id           VARCHAR(64),                               -- RedBlue patch 0003: per-tenant scoping (plan 08 §3)
+     action_type         VARCHAR(40)  NOT NULL,                     -- ActionType enum value
+     title               TEXT         NOT NULL,
+     description         TEXT         NOT NULL,
+@@ -50,6 +51,13 @@ CREATE INDEX IF NOT EXISTS idx_approval_actions_pending
+     ON approval_actions(created_at DESC)
+     WHERE status = 'pending' AND requires_approval = TRUE;
+ 
++-- RedBlue patch 0003: per-tenant scoping (plan 08 §3 / risk #1). Idempotent add for existing DBs,
++-- plus an index for per-tenant queries. The coordinator owns per-tenant policy at L1; this makes
++-- the tenant key available on the native ledger.
++ALTER TABLE approval_actions ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64);
++CREATE INDEX IF NOT EXISTS idx_approval_actions_tenant
++    ON approval_actions(tenant_id);
++
+ 
+ -- Extend workflow_runs.status to include 'paused'. A workflow run
+ -- enters 'paused' when a phase with approval_required=TRUE blocks
+diff --git a/helm/vigil/files/database-init/13_approval_actions.sql b/helm/vigil/files/database-init/13_approval_actions.sql
+index 4020804..8c94d03 100644
+--- a/helm/vigil/files/database-init/13_approval_actions.sql
++++ b/helm/vigil/files/database-init/13_approval_actions.sql
+@@ -17,6 +17,7 @@
+ 
+ CREATE TABLE IF NOT EXISTS approval_actions (
+     action_id           VARCHAR(80)  PRIMARY KEY,                  -- action-YYYYMMDD-HHMMSS-ffffff
++    tenant_id           VARCHAR(64),                               -- RedBlue patch 0003: per-tenant scoping (plan 08 §3)
+     action_type         VARCHAR(40)  NOT NULL,                     -- ActionType enum value
+     title               TEXT         NOT NULL,
+     description         TEXT         NOT NULL,
+@@ -50,6 +51,13 @@ CREATE INDEX IF NOT EXISTS idx_approval_actions_pending
+     ON approval_actions(created_at DESC)
+     WHERE status = 'pending' AND requires_approval = TRUE;
+ 
++-- RedBlue patch 0003: per-tenant scoping (plan 08 §3 / risk #1). Idempotent add for existing DBs,
++-- plus an index for per-tenant queries. The coordinator owns per-tenant policy at L1; this makes
++-- the tenant key available on the native ledger.
++ALTER TABLE approval_actions ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64);
++CREATE INDEX IF NOT EXISTS idx_approval_actions_tenant
++    ON approval_actions(tenant_id);
++
+ 
+ -- Extend workflow_runs.status to include 'paused'. A workflow run
+ -- enters 'paused' when a phase with approval_required=TRUE blocks

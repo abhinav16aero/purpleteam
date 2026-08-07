@@ -1,0 +1,22 @@
+# manifest.toml — RedBlue AI engine pins (plan 01 §1.4)
+# Engines are REPRODUCED (cloned at these SHAs), not vendored into the superproject.
+# Bump a SHA only after re-testing the additive overlay/patch set against it.
+# Verified on disk 2026-08-05.
+
+[engines.decepticon]
+url        = "https://github.com/PurpleAILAB/Decepticon.git"
+tag        = "v1.1.40"
+sha        = "e34afba0db5879501113578d1013026686fa5482"
+submodules = []                                              # benchmark submodules stay OFF for P0
+
+[engines.vigil]
+url        = "https://github.com/Vigil-SOC/vigil.git"
+tag        = "v0.4.0"
+sha        = "311790e2a26e49904ae09dcb1ae974ecb492590f"
+submodules = ["deeptempo-core", "mcp-servers", "mempalace"]  # INIT these (plan 01 §2)
+
+[engines.vigil-llm]
+url        = "https://github.com/deadbits/vigil-llm.git"
+tag        = "v0.10.3-alpha"
+sha        = "f2b4c134d060bae81d29fad07003f3c657e63fc8"
+submodules = []

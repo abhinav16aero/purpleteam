@@ -1,0 +1,142 @@
+# telemetry/docker-compose.telemetry.yml — the sensor plane (P2 / plan 04).
+# Wazuh (host HIDS) + Suricata (network IDS, funneled via Wazuh) + Falco (runtime) watching the
+# TARGET RANGE, so blue detects red from independent telemetry. Its own Compose project:
+#   docker compose -p telemetry -f telemetry/docker-compose.telemetry.yml up
+#
+# REPRESENTATIVE — validates via `docker compose config`. Wazuh single-node needs a one-time
+# cert-generation step (official wazuh-docker `generate-indexer-certs.yml`); those certs mount at
+# the `*_ssl` paths below. Not run on a 14GB/no-GPU box (indexer JVM alone ~2-4GB) — see ADR-0003.
+name: telemetry
+
+# Wazuh image version pinned inline as ${WAZUH_VERSION:-4.9.2}.
+
+services:
+  # ── Wazuh manager: rules/decoders + the custom-vigil Integrator (→ Vigil ingest) ──
+  wazuh.manager:
+    image: wazuh/wazuh-manager:${WAZUH_VERSION:-4.9.2}
+    container_name: wazuh-manager
+    hostname: wazuh-manager
+    ports:
+      - "1514:1514"          # agent enrollment (register)
+      - "1515:1515"          # agent comms
+      - "55000:55000"        # Wazuh API
+    environment:
+      - INDEXER_URL=https://wazuh.indexer:9200
+      - FILEBEAT_SSL_VERIFICATION_MODE=full
+      # Vigil base reached over redblue-shared; the Integrator posts findings here.
+      - VIGIL_URL=${VIGIL_URL:-http://backend:6987}
+    volumes:
+      - wazuh_manager_data:/var/ossec/data
+      - wazuh_manager_etc:/var/ossec/etc
+      # our Integrator + rules (delivered from telemetry/wazuh/)
+      - ./wazuh/integrations/custom-vigil:/var/ossec/integrations/custom-vigil:ro
+      - ./wazuh/ossec.conf.snippet:/redblue/ossec.conf.snippet:ro   # merge into /var/ossec/etc/ossec.conf
+      - ./wazuh/certs:/etc/ssl/wazuh:ro                              # from cert-gen (setup step)
+    networks: [telemetry-net, redblue-shared]
+    restart: unless-stopped
+
+  wazuh.indexer:
+    image: wazuh/wazuh-indexer:${WAZUH_VERSION:-4.9.2}
+    container_name: wazuh-indexer
+    hostname: wazuh.indexer
+    ports:
+      - "9200:9200"          # OpenSearch (alerts: wazuh-alerts-*)
+    environment:
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"   # host needs sysctl vm.max_map_count=262144
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - wazuh_indexer_data:/var/lib/wazuh-indexer
+      - ./wazuh/certs:/usr/share/wazuh-indexer/certs:ro
+    networks: [telemetry-net]
+    restart: unless-stopped
+
+  wazuh.dashboard:
+    image: wazuh/wazuh-dashboard:${WAZUH_VERSION:-4.9.2}
+    container_name: wazuh-dashboard
+    ports:
+      - "8443:5601"          # remapped from 443 (00 §4)
+    environment:
+      - INDEXER_URL=https://wazuh.indexer:9200
+    volumes:
+      - ./wazuh/certs:/usr/share/wazuh-dashboard/certs:ro
+    depends_on: [wazuh.indexer]
+    networks: [telemetry-net]
+    restart: unless-stopped
+
+  # ── Suricata: network IDS at the range choke point (af-packet). Funnels via Wazuh. ──
+  suricata:
+    image: jasonish/suricata:latest
+    container_name: suricata
+    # Sniffs range-net; HOME_NET scoped to the range CIDR in suricata.yaml.
+    cap_add: [NET_ADMIN, NET_RAW, SYS_NICE]
+    command: ["-i", "eth0"]   # the range-net interface inside the container
+    volumes:
+      - ./suricata/suricata.yaml:/etc/suricata/suricata.yaml:ro
+      - suricata_logs:/var/log/suricata     # eve.json — read by the shipper below
+    networks: [range-net]
+    restart: unless-stopped
+
+  # Ships Suricata eve.json into Wazuh (native Suricata decoders) → same custom-vigil transform.
+  suricata.shipper:
+    image: wazuh/wazuh-agent:${WAZUH_VERSION:-4.9.2}
+    container_name: suricata-shipper
+    environment:
+      - WAZUH_MANAGER=wazuh.manager
+      - WAZUH_AGENT_NAME=suricata-shipper
+    volumes:
+      - suricata_logs:/var/log/suricata:ro
+    depends_on: [wazuh.manager]
+    networks: [telemetry-net, range-net]
+    restart: unless-stopped
+
+  # ── Falco: container/K8s runtime (eBPF). Runtime sensor. ──
+  # NOTE (P2 remaining item): Falco→canonical-finding shaping is not yet wired — options are
+  # (a) Falcosidekick→Kafka `security.findings` (Vigil's existing consumer; needs kafka on the bus),
+  # or (b) the hardened /api/webhooks/wazuh receiver (P5) accepting Falco payloads. The Wazuh+Suricata
+  # lane (tested) covers host+network; Falco adds container-escape/IMDS coverage when shaped. See ADR-0003.
+  falco:
+    image: falcosecurity/falco:latest
+    container_name: falco
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock
+      - /proc:/host/proc:ro
+      - ./falco/falco.yaml:/etc/falco/falco.yaml:ro
+    networks: [telemetry-net]
+    restart: unless-stopped
+
+  falcosidekick:
+    image: falcosecurity/falcosidekick:latest
+    container_name: falcosidekick
+    environment:
+      - CONFIG_FILE=/config/falcosidekick.yaml
+    volumes:
+      - ./falco/falcosidekick.yaml:/config/falcosidekick.yaml:ro
+    networks: [telemetry-net, redblue-shared]
+    restart: unless-stopped
+
+  # ── Target range (profile `target`): the instrumented victim ──
+  dvwa:
+    image: vulnerables/web-dvwa:latest
+    container_name: range-dvwa
+    networks: [range-net]
+    profiles: [target]
+    restart: unless-stopped
+  # A Wazuh agent on the target host would enroll to wazuh.manager:1515 (runtime step; see README).
+
+volumes:
+  wazuh_manager_data:
+  wazuh_manager_etc:
+  wazuh_indexer_data:
+  suricata_logs:
+
+networks:
+  telemetry-net:
+    driver: bridge
+  # range-net: target + Suricata sniff; the Kali sandbox joins this as its ONLY extra attachment
+  # (00 §5) so red can reach the target while staying off redblue-shared.
+  range-net:
+    driver: bridge
+  redblue-shared:
+    external: true        # outbound push (manager/sidekick → Vigil :6987) rides the bus

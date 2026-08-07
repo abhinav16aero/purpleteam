@@ -1,0 +1,110 @@
+diff --git a/services/autonomous_response_service.py b/services/autonomous_response_service.py
+index b40c711..754356f 100644
+--- a/services/autonomous_response_service.py
++++ b/services/autonomous_response_service.py
+@@ -339,17 +339,28 @@ Please review and approve/reject in the SOC dashboard.
+             # Check if auto-approved (confidence >= 0.90)
+             if action.status == "approved":
+                 logger.info(f"Action {action.action_id} auto-approved (confidence: {confidence:.2%})")
+-                
+-                # Execute isolation (would call actual CrowdStrike API in production)
++
++                # Execute isolation via a real EDR actuator.
+                 execution_result = self._execute_isolation(ip_address, hostname, reason, confidence)
+-                
+-                # Mark as executed
+-                self.approval_service.mark_executed(action.action_id, execution_result)
+-                
++
++                # RedBlue patch 0001: HONOR the result. _execute_isolation fails closed when no EDR
++                # is wired (success:False); mark FAILED and report accurately instead of falsely
++                # claiming containment (plan 08 risk #2). Only a real success is reported executed.
++                if execution_result.get("success"):
++                    self.approval_service.mark_executed(action.action_id, execution_result)
++                    return {
++                        "status": "executed",
++                        "action_id": action.action_id,
++                        "message": f"Host {hostname or ip_address} isolated automatically",
++                        "confidence": confidence,
++                        "result": execution_result
++                    }
++                self.approval_service.mark_failed(
++                    action.action_id, execution_result.get("message", "isolation not performed"))
+                 return {
+-                    "status": "executed",
++                    "status": "failed",
+                     "action_id": action.action_id,
+-                    "message": f"Host {hostname or ip_address} isolated automatically",
++                    "message": execution_result.get("message", "host isolation was not performed"),
+                     "confidence": confidence,
+                     "result": execution_result
+                 }
+@@ -411,30 +422,52 @@ Please review and approve/reject in the SOC dashboard.
+         confidence: float
+     ) -> Dict:
+         """
+-        Execute host isolation via CrowdStrike.
+-        
+-        In production, this would call the actual CrowdStrike API.
+-        For now, it returns a mock result.
++        Execute host isolation via a real EDR integration.
++
++        RedBlue patch 0001 (plan 08 risk #2): the previous implementation returned a hard-coded
++        "(MOCK)" success and called no EDR — an auto-approved isolate at >=0.90 confidence did
++        nothing while reporting containment. This FAILS CLOSED instead: it never claims a host was
++        isolated unless a real EDR actuator performed it. Wire a CrowdStrike/SentinelOne/Defender
++        MCP actuator to enable, or run the daemon with DAEMON_DRY_RUN.
+         """
++        try:
++            from core.config import is_integration_enabled
++        except Exception:
++            def is_integration_enabled(_name: str) -> bool:
++                return False
++
+         logger.info(f"Executing isolation: {hostname or ip_address} (confidence: {confidence:.2%})")
+-        
+-        # Mock execution result
++
++        edr = next((name for name in ("crowdstrike", "sentinelone", "microsoft-defender")
++                    if is_integration_enabled(name)), None)
++        if edr is None:
++            logger.warning("isolate_host requested but no EDR integration enabled — failing closed")
++            return {
++                "success": False,
++                "action": "host_isolation_unavailable",
++                "ip_address": ip_address,
++                "hostname": hostname,
++                "reason": reason,
++                "confidence": confidence,
++                "timestamp": datetime.now().isoformat(),
++                "message": ("No EDR integration (CrowdStrike / SentinelOne / Microsoft Defender) "
++                            "enabled — host isolation was NOT performed. Enable an EDR actuator or "
++                            "run DAEMON_DRY_RUN."),
++            }
++
++        # An EDR is enabled but the isolation actuator MCP call is provisioned per-deployment. Until
++        # it is wired, fail closed rather than claim containment we did not perform.
++        logger.error(f"EDR '{edr}' enabled but isolation actuator not wired — failing closed")
+         return {
+-            "success": True,
+-            "action": "host_isolated",
++            "success": False,
++            "action": "host_isolation_actuator_unwired",
++            "integration": edr,
+             "ip_address": ip_address,
+             "hostname": hostname,
+             "reason": reason,
+             "confidence": confidence,
+             "timestamp": datetime.now().isoformat(),
+-            "isolation_type": "network",
+-            "message": "Host has been network isolated successfully (MOCK)",
+-            "next_steps": [
+-                "Verify threat containment",
+-                "Conduct forensic analysis",
+-                "Remediate threat",
+-                "Consider unisolation after remediation"
+-            ]
++            "message": f"EDR '{edr}' enabled but its isolation actuator is not wired in this deployment.",
+         }
+     
+     def execute_approved_actions(self) -> List[Dict]:

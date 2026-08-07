@@ -1,0 +1,65 @@
+diff --git a/services/approval_service.py b/services/approval_service.py
+index aa6e05f..83aa9a8 100644
+--- a/services/approval_service.py
++++ b/services/approval_service.py
+@@ -192,10 +192,10 @@ class ApprovalService:
+         if force_manual or self.get_force_manual_approval():
+             return False
+         confidence = action.get("confidence", 0.0)
++        # RedBlue patch 0004: auto-approve ONLY at >= the authoritative 0.90 gate. The prior
++        # `>= 0.85` branch disagreed with create_action's 0.90 rule (plan 08 §0 / risk #4).
+         if confidence >= threshold:
+             return True
+-        if confidence >= 0.85:
+-            return True
+         return False
+ 
+     def needs_flag(self, confidence: float) -> bool:
+@@ -207,7 +207,9 @@ class ApprovalService:
+         confidence = action.get("confidence", 0.0)
+         if confidence < 0.70:
+             return "monitor_only"
+-        elif confidence < 0.85:
++        # RedBlue patch 0004: manual_approval below the 0.90 gate (was 0.85); 0.85-0.89 is the
++        # flagged band (needs_flag) but still NOT auto-approved.
++        elif confidence < threshold:
+             return "manual_approval"
+         else:
+             return "auto_approve"
+diff --git a/tests/unit/test_approval_workflow.py b/tests/unit/test_approval_workflow.py
+index 9224792..53c4bfe 100644
+--- a/tests/unit/test_approval_workflow.py
++++ b/tests/unit/test_approval_workflow.py
+@@ -34,23 +34,25 @@ class TestConfidenceThresholds:
+         
+         assert should_auto_approve is True
+     
+-    def test_auto_approve_with_flag(self):
+-        """Test auto-approval for confidence 0.85-0.89."""
++    def test_flagged_band_does_not_auto_approve(self):
++        """RedBlue patch 0004: confidence 0.85-0.89 is the FLAGGED band — it does NOT auto-approve
++        (only >= the authoritative 0.90 gate does). It still surfaces via needs_flag()."""
+         service = ApprovalService()
+-        
++
+         action = {
+             "type": "block_ip",
+             "confidence": 0.87
+         }
+-        
++
+         should_auto_approve = service.should_auto_approve(
+             action,
+             threshold=0.90,
+             force_manual=False
+         )
+-        
+-        # Should auto-approve but with flag
+-        assert should_auto_approve is True
++
++        # 0.87 < 0.90 → must NOT auto-approve; it is only flagged for review
++        assert should_auto_approve is False
++        assert service.needs_flag(0.87) is True
+         assert service.needs_flag(action["confidence"]) is True
+     
+     def test_require_approval_medium_confidence(self):

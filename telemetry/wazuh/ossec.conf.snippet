@@ -1,0 +1,13 @@
+<!-- Merge inside <ossec_config> in /var/ossec/etc/ossec.conf on the manager (plan 04).
+     Wires the custom-vigil Integrator so every rule.level>=5 alert is transformed to a
+     Vigil canonical finding and POSTed to /api/ingest/ingest-string. -->
+<integration>
+  <name>custom-vigil</name>
+  <hook_url>http://backend:6987</hook_url>   <!-- Vigil base (reached over redblue-shared) -->
+  <api_key>unused</api_key>                  <!-- custom integrator ignores it -->
+  <level>5</level>                           <!-- forward only level>=5 (noise control, plan 04 §5) -->
+  <alert_format>json</alert_format>
+</integration>
+
+<!-- Enable Suricata eve.json ingestion on the suricata.shipper agent (native decoders). -->
+<!-- <localfile><log_format>json</log_format><location>/var/log/suricata/eve.json</location></localfile> -->

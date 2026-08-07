@@ -1,0 +1,53 @@
+{
+  "title": "RedBlue AI — Posture",
+  "uid": "redblue-posture",
+  "tags": ["redblue", "purple-team"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Detection rate",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1,
+        "thresholds": { "steps": [
+          { "color": "red", "value": null }, { "color": "yellow", "value": 0.5 },
+          { "color": "green", "value": 0.8 } ] } } },
+      "targets": [ { "expr": "redblue_detected_total / clamp_min(redblue_attacks_total, 1)", "legendFormat": "detected/attacked" } ]
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "MTTD (p50 / p90, seconds)",
+      "gridPos": { "h": 6, "w": 12, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum(rate(redblue_mttd_seconds_bucket[5m])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.9, sum(rate(redblue_mttd_seconds_bucket[5m])) by (le))", "legendFormat": "p90" }
+      ]
+    },
+    {
+      "id": 3, "type": "stat", "title": "Egress = 0 (sovereignty SLI)",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bytes",
+        "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } },
+      "targets": [ { "expr": "redblue_external_egress_bytes_total", "legendFormat": "external egress" } ],
+      "description": "Bytes to any non-allowlisted external host. MUST stay 0 — turns red the instant it isn't."
+    },
+    {
+      "id": 4, "type": "piechart", "title": "Autonomy actions by tier",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 6 },
+      "targets": [ { "expr": "sum by (tier) (redblue_actions_total)", "legendFormat": "{{tier}}" } ]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Engagements (by status)",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 6 },
+      "targets": [ { "expr": "sum by (status) (redblue_engagements_total)", "legendFormat": "{{status}}" } ]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Quarantined detections (injection / unverified)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 6 },
+      "targets": [ { "expr": "sum by (reason) (redblue_quarantined_total)", "legendFormat": "{{reason}}" } ]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+# Falcosidekick — fan-out for Falco alerts (plan 04). P2 REMAINING ITEM: the Falco→canonical
+# finding shaping is not yet wired (see ADR-0003). Two options:
+debug: false
+minimumpriority: notice          # drop Debug/Informational before shipping
+
+# (a) Kafka lane — Vigil's existing consumer ingests finding-shaped JSON (docs/KAFKA_INGESTION.md).
+#     Requires: kafka on redblue-shared (Vigil `kafka` profile) + a shaping template so the message
+#     is a canonical finding (finding_id, data_source=falco, mitre from tags, entity_context.*).
+kafka:
+  hostport: "kafka:29092"
+  topic: "security.findings"
+
+# (b) Hardened webhook (P5) — the /api/webhooks/falco receiver transforms Falco payloads server-side
+#     with the same mapping as custom-vigil. Preferred long-term.
+# webhook:
+#   address: "http://backend:6987/api/webhooks/falco"
+#   customHeaders:
+#     X-Falco-Signature: "${FALCO_WEBHOOK_SECRET}"

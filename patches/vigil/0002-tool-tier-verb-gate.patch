@@ -1,0 +1,39 @@
+diff --git a/services/tool_manager.py b/services/tool_manager.py
+index 5ed9148..42bb7a5 100644
+--- a/services/tool_manager.py
++++ b/services/tool_manager.py
+@@ -126,6 +126,20 @@ TOOL_TIERS: Dict[str, List[str]] = {
+         "disable_user",
+         "quarantine_file",
+         "close_case",
++        # RedBlue (plan 08 §2.3): the remaining high-impact ActionTypes the base list omitted.
++        # block_domain/waf_block/gateway_block are Cloudflare account/org-wide; access_revoke
++        # revokes a user's sessions — all human-gated, never auto.
++        "block_domain",
++        "waf_block",
++        "gateway_block",
++        "access_revoke",
++        # RedBlue (plan 06 §4.3): the decepticon-driver MCP tools. Launching red is a
++        # control-plane action → NEVER auto (00 §10). Belt-and-suspenders with the
++        # offensive verbs added to _ACTION_VERB_TOKENS below.
++        "red_launch_engagement",
++        "red_exploit_target",
++        "red_stop_engagement",
++        "decepticon_start_engagement",
+     ],
+     "forbidden": [
+         "delete_case",
+@@ -174,6 +188,13 @@ _ACTION_VERB_TOKENS = frozenset(
+         "purge",
+         "wipe",
+         "delete",
++        # RedBlue (plan 06 §4.3): offensive verbs so a red-team driver tool is human-gated,
++        # never auto-executed. The driver tools carry launch/exploit in their names.
++        "launch",
++        "exploit",
++        "attack",
++        "detonate",
++        "beacon",
+     }
+ )
+ 

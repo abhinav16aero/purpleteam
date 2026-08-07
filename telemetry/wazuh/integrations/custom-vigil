@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""custom-vigil — Wazuh Integrator: alert → Vigil canonical finding → ingest.
+
+Runs ON the Wazuh manager (invoked by ossec.conf <integration>). Wazuh calls:
+    custom-vigil <alert_file.json> <api_key> <hook_url> [options]
+It transforms a Wazuh alert (incl. Suricata alerts that Wazuh decoded) into Vigil's
+canonical finding (plans 05/06) and POSTs it to Vigil's ingest endpoint.
+
+P2 path (zero Vigil patch): POST /api/ingest/ingest-string. The hardened HMAC
+receiver (/api/webhooks/wazuh) is a P5 follow-up; the transform below is identical.
+
+Self-test:  ./custom-vigil --selftest    (no network; prints + asserts canonical shape)
+
+stdlib-only (Wazuh manager ships python3).
+"""
+import sys, json, hashlib, urllib.request, urllib.parse
+from datetime import datetime, timezone
+
+VIGIL_URL = None  # set from argv[3] (hook_url) or env at runtime
+ID_HASH_WIDTH = 16          # matches Vigil ingestion_service.py (sha256[:16])
+
+# Rule groups that mark a Wazuh alert as network-IDS (Suricata funnels through Wazuh).
+_SURICATA_GROUPS = {"suricata", "ids", "suricata_alert"}
+
+
+def _now_date(ts: str) -> str:
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).strftime("%Y%m%d")
+    except Exception:
+        return datetime.now(timezone.utc).strftime("%Y%m%d")
+
+
+def _severity(level) -> str:
+    try:
+        lv = int(level)
+    except (TypeError, ValueError):
+        return "low"
+    if lv >= 12: return "critical"
+    if lv >= 8:  return "high"
+    if lv >= 4:  return "medium"
+    return "low"
+
+
+def _mitre_predictions(rule: dict) -> dict:
+    """rule.mitre.id → {technique_id: 1.0}. Technique-ID keys only (plan 05 §1.4)."""
+    mitre = (rule.get("mitre") or {})
+    ids = mitre.get("id") or []
+    if isinstance(ids, str):
+        ids = [ids]
+    out = {}
+    for tid in ids:
+        # keep only well-formed T#### / T####.###
+        if isinstance(tid, str) and tid.startswith("T") and tid[1:].split(".")[0].isdigit():
+            out[tid] = 1.0
+    return out
+
+
+def transform(alert: dict) -> dict:
+    """Wazuh alert dict → Vigil canonical finding dict (13 fields). Pure; testable."""
+    rule = alert.get("rule") or {}
+    data = alert.get("data") or {}
+    agent = alert.get("agent") or {}
+    groups = set(g.lower() for g in (rule.get("groups") or []))
+    ts = alert.get("timestamp") or datetime.now(timezone.utc).isoformat()
+
+    data_source = "suricata" if (_SURICATA_GROUPS & groups) else "wazuh"
+    alert_id = str(alert.get("id") or f"{rule.get('id','0')}:{ts}")
+    stable_key = f"{data_source}:{alert_id}"
+    finding_id = "f-%s-%s" % (_now_date(ts), hashlib.sha256(stable_key.encode()).hexdigest()[:ID_HASH_WIDTH])
+
+    level = rule.get("level", 0)
+    # entity_context: SINGULAR canonical keys (plan 05 §1.3); host/rule metadata nested here.
+    ec = {
+        "src_ip":     data.get("srcip") or data.get("src_ip"),
+        "dst_ip":     data.get("dstip") or data.get("dst_ip"),
+        "src_port":   data.get("srcport") or data.get("src_port"),
+        "dst_port":   data.get("dstport") or data.get("dst_port"),
+        "proto":      data.get("protocol") or data.get("proto"),
+        "hostname":   agent.get("name"),
+        "agent_ip":   agent.get("ip"),
+        "rule_id":    rule.get("id"),
+        "rule_level": level,
+        "rule_groups": sorted(groups),
+    }
+    ec = {k: v for k, v in ec.items() if v is not None}  # drop empties
+
+    return {
+        "finding_id":  finding_id,
+        "external_id": f"{data_source}:{alert_id}",          # (data_source, external_id) = real dedup key
+        "data_source": data_source,
+        "timestamp":   ts,
+        "severity":    _severity(level),
+        "anomaly_score": min(1.0, (int(level) if str(level).isdigit() else 0) / 15.0),
+        "mitre_predictions": _mitre_predictions(rule),        # {} if none — never null (plan 05 §1.5)
+        "embedding":   [0.0] * 768,
+        "description": rule.get("description") or f"Wazuh rule {rule.get('id')}",
+        "entity_context": ec,
+        "evidence_links": [{"type": "log", "ref": alert.get("full_log") or alert.get("location") or ""}],
+        "status": "new",
+    }
+
+
+def post(finding: dict, base_url: str) -> int:
+    """POST the canonical finding to Vigil /api/ingest/ingest-string (form-encoded)."""
+    body = urllib.parse.urlencode({
+        "data": json.dumps(finding), "format": "json", "data_type": "finding",
+    }).encode()
+    req = urllib.request.Request(base_url.rstrip("/") + "/api/ingest/ingest-string",
+                                 data=body, method="POST")
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return r.status
+
+
+def main(argv):
+    if len(argv) >= 2 and argv[1] == "--selftest":
+        return _selftest()
+    if len(argv) < 4:
+        sys.stderr.write("usage: custom-vigil <alert.json> <api_key> <hook_url> [opts]\n")
+        return 2
+    alert = json.load(open(argv[1]))
+    finding = transform(alert)
+    code = post(finding, argv[3])   # hook_url is Vigil base (e.g. http://backend:6987)
+    sys.stderr.write("custom-vigil: ingested %s (HTTP %s)\n" % (finding["finding_id"], code))
+    return 0
+
+
+def _selftest():
+    samples = [
+        {"name": "wazuh host (SUID privesc)", "alert": {
+            "id": "1699999999.1", "timestamp": "2026-08-05T10:00:00Z",
+            "rule": {"level": 10, "id": "40111", "description": "New SUID binary created",
+                     "groups": ["syscheck", "privilege_escalation"],
+                     "mitre": {"id": ["T1548.001"]}},
+            "agent": {"name": "web01", "ip": "10.20.0.9"},
+            "data": {"srcip": "10.20.0.5"}, "full_log": "..."}},
+        {"name": "suricata via wazuh (nmap scan)", "alert": {
+            "id": "1699999999.2", "timestamp": "2026-08-05T10:01:00Z",
+            "rule": {"level": 6, "id": "86601", "description": "Suricata: ET SCAN Nmap",
+                     "groups": ["ids", "suricata"], "mitre": {"id": ["T1046"]}},
+            "agent": {"name": "sensor"},
+            "data": {"srcip": "10.20.0.5", "dstip": "10.20.0.9", "dstport": "80", "protocol": "TCP"}}},
+    ]
+    ok = True
+    for s in samples:
+        f = transform(s["alert"])
+        checks = {
+            "finding_id sha256_16": f["finding_id"].startswith("f-") and len(f["finding_id"].split("-")[-1]) == 16,
+            "external_id set":      bool(f["external_id"]),
+            "data_source":          f["data_source"] in ("wazuh", "suricata"),
+            "mitre technique-IDs":  all(k.startswith("T") for k in f["mitre_predictions"]),
+            "entity singular src_ip": "src_ip" in f["entity_context"],
+            "mitre not null":       isinstance(f["mitre_predictions"], dict),
+            "embedding 768":        len(f["embedding"]) == 768,
+        }
+        print("\n[%s] → %s  (%s, sev=%s, mitre=%s)" % (
+            s["name"], f["finding_id"], f["data_source"], f["severity"], list(f["mitre_predictions"])))
+        for name, passed in checks.items():
+            print("   %s %s" % ("✓" if passed else "✗", name))
+            ok = ok and passed
+    print("\nSELFTEST:", "PASS ✓" if ok else "FAIL ✗")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

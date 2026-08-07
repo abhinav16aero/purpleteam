@@ -1,0 +1,316 @@
+<title>RedBlue AI — Architecture</title>
+<style>
+  :root {
+    --bg: #f3f6fb; --surface: #ffffff; --surface-2: #eef2f8; --border: #d8e0ec;
+    --text: #172033; --muted: #5c6a82; --faint: #8a97ac;
+    --red: #d33940; --red-t: #d3394014; --blue: #2f6fd0; --blue-t: #2f6fd012;
+    --green: #1f9d4d; --green-t: #1f9d4d12; --amber: #b9791a; --amber-t: #b9791a12;
+    --violet: #7a52c8; --violet-t: #7a52c812;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --r: 12px; --maxw: 1080px; --spine: 700px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #090c12; --surface: #10151f; --surface-2: #161d2b; --border: #232d40;
+      --text: #dce4f1; --muted: #93a0b6; --faint: #63708a;
+      --red: #f0575c; --red-t: #f0575c1c; --blue: #5b9bf0; --blue-t: #5b9bf016;
+      --green: #46c266; --green-t: #46c26618; --amber: #e6a83a; --amber-t: #e6a83a16;
+      --violet: #b083f0; --violet-t: #b083f018;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #090c12; --surface: #10151f; --surface-2: #161d2b; --border: #232d40;
+    --text: #dce4f1; --muted: #93a0b6; --faint: #63708a;
+    --red: #f0575c; --red-t: #f0575c1c; --blue: #5b9bf0; --blue-t: #5b9bf016;
+    --green: #46c266; --green-t: #46c26618; --amber: #e6a83a; --amber-t: #e6a83a16;
+    --violet: #b083f0; --violet-t: #b083f018;
+  }
+  :root[data-theme="light"] {
+    --bg: #f3f6fb; --surface: #ffffff; --surface-2: #eef2f8; --border: #d8e0ec;
+    --text: #172033; --muted: #5c6a82; --faint: #8a97ac;
+    --red: #d33940; --red-t: #d3394014; --blue: #2f6fd0; --blue-t: #2f6fd012;
+    --green: #1f9d4d; --green-t: #1f9d4d12; --amber: #b9791a; --amber-t: #b9791a12;
+    --violet: #7a52c8; --violet-t: #7a52c812;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap {
+    background: var(--bg); color: var(--text); font-family: var(--sans);
+    line-height: 1.5; padding: clamp(20px, 5vw, 56px) 20px 64px; min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: var(--maxw); margin: 0 auto; }
+  .mono { font-family: var(--mono); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  /* header */
+  header.hero { margin-bottom: 40px; }
+  .hero h1 {
+    font-size: clamp(34px, 6vw, 56px); line-height: 1.02; margin: 12px 0 0; letter-spacing: -.02em;
+    text-wrap: balance; font-weight: 780;
+  }
+  .hero h1 .rb-r { color: var(--red); } .hero h1 .rb-b { color: var(--blue); }
+  .hero p.lede {
+    max-width: 62ch; margin: 16px 0 0; color: var(--muted); font-size: clamp(15px, 2vw, 17.5px);
+  }
+  .proof { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface); font-size: 12.5px; color: var(--text);
+    font-family: var(--mono);
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .pill.ok .dot { background: var(--green); box-shadow: 0 0 0 3px var(--green-t); }
+
+  /* section titles */
+  .band-title { display: flex; align-items: baseline; gap: 12px; margin: 44px 0 18px; }
+  .band-title h2 { font-size: 15px; margin: 0; letter-spacing: .02em; font-weight: 680; }
+  .band-title .rule { flex: 1; height: 1px; background: var(--border); }
+
+  /* the vertical loop spine */
+  .spine { max-width: var(--spine); margin: 0 auto; }
+  .plane {
+    border: 1px solid var(--border); border-radius: var(--r); background: var(--surface);
+    padding: 16px 18px; position: relative; overflow: hidden;
+  }
+  .plane::before {
+    content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--pc, var(--border));
+    opacity: .0;
+  }
+  .plane.red   { --pc: var(--red);   background: linear-gradient(180deg, var(--red-t), transparent 120px), var(--surface); }
+  .plane.blue  { --pc: var(--blue);  background: linear-gradient(180deg, var(--blue-t), transparent 120px), var(--surface); }
+  .plane.green { --pc: var(--green); background: linear-gradient(180deg, var(--green-t), transparent 160px), var(--surface); }
+  .plane.amber { --pc: var(--amber); background: linear-gradient(180deg, var(--amber-t), transparent 120px), var(--surface); }
+  .plane.violet{ --pc: var(--violet);background: linear-gradient(180deg, var(--violet-t), transparent 120px), var(--surface); }
+
+  .plane .ph { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .plane .glyph { width: 9px; height: 9px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pc) 18%, transparent); }
+  .plane .role { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--pc); font-weight: 600; }
+  .plane .name { font-weight: 680; font-size: 16px; margin-right: auto; }
+  .plane .port { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .plane .sub { color: var(--muted); font-size: 13px; margin: 3px 0 12px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+  .chip {
+    font-family: var(--mono); font-size: 12px; padding: 4px 9px; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text); white-space: nowrap;
+  }
+  .chip.key { border-color: color-mix(in srgb, var(--pc) 45%, var(--border)); color: var(--pc); font-weight: 600; }
+  .chip.iso { border-style: dashed; color: var(--muted); }
+
+  /* the 7-node loop strip inside the coordinator */
+  .loopstrip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 2px; margin: 12px 0 4px; }
+  .node { font-family: var(--mono); font-size: 11.5px; padding: 4px 8px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); }
+  .node.gate { border-color: color-mix(in srgb, var(--amber) 55%, var(--border)); color: var(--amber); }
+  .arrow { color: var(--faint); font-family: var(--mono); font-size: 12px; }
+
+  /* numbered connectors between planes */
+  .conn { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; padding: 10px 0 10px 4px; }
+  .conn .num {
+    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+    font-family: var(--mono); font-size: 13px; font-weight: 700; color: #fff; background: var(--cc, var(--green));
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--cc, var(--green)) 16%, transparent);
+  }
+  .conn .lbl { font-size: 13.5px; color: var(--muted); }
+  .conn .lbl b { color: var(--text); font-weight: 620; }
+  .conn.back .num { background: transparent; color: var(--green); border: 1.5px dashed var(--green); box-shadow: none; }
+  .conn.back .lbl b { color: var(--green); }
+
+  /* lower grid: sovereignty / governance / defense */
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .card { border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); padding: 16px 18px; }
+  .card h3 { margin: 0 0 4px; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+  .card h3 .g { width: 8px; height: 8px; border-radius: 50%; }
+  .card p { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+  .tiers { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .tier { display: grid; grid-template-columns: 92px 1fr; gap: 10px; align-items: start; }
+  .tier .t {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 700;
+    padding: 3px 0; text-align: center; border-radius: 6px;
+  }
+  .tier.auto  .t { color: var(--green);  background: var(--green-t); }
+  .tier.human .t { color: var(--amber);  background: var(--amber-t); }
+  .tier.never .t { color: var(--red);    background: var(--red-t); }
+  .tier .d { font-size: 12.5px; color: var(--muted); }
+  .tier .d b { color: var(--text); font-weight: 600; }
+
+  .sov { border-color: color-mix(in srgb, var(--violet) 40%, var(--border)); }
+  .sov .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+  .sov .flow .box { font-family: var(--mono); font-size: 12px; padding: 6px 10px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface-2); }
+  .sov .flow .hub { border-color: var(--violet); color: var(--violet); font-weight: 600; }
+
+  /* moat pillars */
+  .pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 8px; }
+  .pillar { border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; background: var(--surface); }
+  .pillar .k { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: .08em; }
+  .pillar .v { font-weight: 640; font-size: 14.5px; margin-top: 4px; }
+  .pillar .x { color: var(--muted); font-size: 12.5px; margin-top: 5px; }
+
+  footer.foot { margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--faint); font-size: 12px; font-family: var(--mono); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+
+  @media (max-width: 560px) {
+    .tier { grid-template-columns: 1fr; } .tier .t { text-align: left; padding: 3px 8px; justify-self: start; }
+  }
+</style>
+
+<div class="wrap">
+<div class="page">
+
+  <header class="hero">
+    <div class="eyebrow">Autonomous purple-team platform · ESDS Sovereign Cloud</div>
+    <h1><span class="rb-r">Red</span><span class="rb-b">Blue</span> AI</h1>
+    <p class="lede">Continuous red-team attack simulation and blue-team detection, closed into one
+      governed loop — running entirely on local LLMs with zero foreign-API egress. The engines are
+      reused; the coordinator, governance, sovereignty and evidence layer is the product.</p>
+    <div class="proof">
+      <span class="pill ok"><span class="dot"></span>Closed purple-team loop</span>
+      <span class="pill ok"><span class="dot"></span>Sovereign · egress = 0</span>
+      <span class="pill ok"><span class="dot"></span>Graduated-autonomy governance</span>
+      <span class="pill ok"><span class="dot"></span>First-class AI-native defense</span>
+      <span class="pill"><span class="mono">coordinator · 90/90 tests green</span></span>
+    </div>
+  </header>
+
+  <div class="band-title"><h2>The closed loop</h2><span class="rule"></span><span class="eyebrow">1 → 5</span></div>
+
+  <div class="spine">
+
+    <!-- console -->
+    <div class="plane violet">
+      <div class="ph"><span class="glyph"></span><span class="role">Console</span>
+        <span class="name">Unified SOC console</span><span class="port">Vigil FE · :6988</span></div>
+      <div class="sub">One pane of glass — the operator launches engagements, watches posture, and works the approvals queue.</div>
+      <div class="chips"><span class="chip">Red-Team / Engagements</span><span class="chip">Posture dashboard</span>
+        <span class="chip">Approvals queue · HITL</span><span class="chip iso">single-origin /api/coordinator/*</span></div>
+    </div>
+
+    <div class="conn"><div class="num" style="--cc:var(--green)">1</div>
+      <div class="lbl"><b>Trigger a scoped engagement</b> · coordinator → Decepticon LangGraph API (:2024), per-tenant RoE</div></div>
+
+    <!-- coordinator -->
+    <div class="plane green">
+      <div class="ph"><span class="glyph"></span><span class="role">Coordinator</span>
+        <span class="name">RedBlue coordinator — the closed-loop brain</span><span class="port">LangGraph · FastAPI :8900</span></div>
+      <div class="sub">The piece neither engine ships: drives red, reads ground-truth, scores posture, governs every response, seals evidence.</div>
+      <div class="loopstrip mono">
+        <span class="node">plan</span><span class="arrow">›</span>
+        <span class="node">trigger_red</span><span class="arrow">›</span>
+        <span class="node">await_telemetry</span><span class="arrow">›</span>
+        <span class="node">collect_detections</span><span class="arrow">›</span>
+        <span class="node">score</span><span class="arrow">›</span>
+        <span class="node gate">decide_response</span><span class="arrow">›</span>
+        <span class="node">report_evidence</span>
+      </div>
+      <div class="chips">
+        <span class="chip key">⚖ PolicyEngine · auto/human/never</span>
+        <span class="chip key">🔒 WORM evidence · hash-chain</span>
+        <span class="chip key">🛡 Injection shield + verify gate</span>
+        <span class="chip">📊 Scoring · detection-rate · MTTD</span>
+        <span class="chip">🔁 CART continuous</span>
+        <span class="chip">🎯 Eval · agent-hijack = 0</span>
+      </div>
+    </div>
+
+    <div class="conn"><div class="num" style="--cc:var(--red)">2</div>
+      <div class="lbl"><b>Attacks the target</b> · from the network-isolated Kali sandbox, within RoE scope</div></div>
+
+    <!-- red -->
+    <div class="plane red">
+      <div class="ph"><span class="glyph"></span><span class="role">Red engine</span>
+        <span class="name">Decepticon</span><span class="port">LangGraph :2024</span></div>
+      <div class="sub">~25 autonomous agents run a real kill-chain under an operator-approved OPPLAN, RoE and HITL.</div>
+      <div class="chips"><span class="chip">Orchestrator + ~25 agents</span><span class="chip">OPPLAN · RoE · HITL</span>
+        <span class="chip iso">Kali sandbox :9999 · isolated</span><span class="chip key">Neo4j attack graph :7687</span>
+        <span class="chip">events.jsonl · ground truth</span></div>
+    </div>
+
+    <div class="conn"><div class="num" style="--cc:var(--amber)">3</div>
+      <div class="lbl"><b>Sensors detect it — independently</b> · alerts → Wazuh webhook / Kafka (blue never trusts red's self-report)</div></div>
+
+    <!-- target + sensors -->
+    <div class="plane amber">
+      <div class="ph"><span class="glyph"></span><span class="role">Target + sensors</span>
+        <span class="name">Instrumented range</span><span class="port">range-net</span></div>
+      <div class="sub">The thing under attack, watched by three independent sensor planes — this is what makes it <em>purple</em>.</div>
+      <div class="chips"><span class="chip">Target · DVWA / K8s / AD</span><span class="chip">Wazuh · host</span>
+        <span class="chip">Suricata · network</span><span class="chip">Falco · runtime</span></div>
+    </div>
+
+    <div class="conn"><div class="num" style="--cc:var(--blue)">4</div>
+      <div class="lbl"><b>Blue investigates for real</b> · sensor alerts become canonical findings; the 24/7 daemon triages, investigates, responds</div></div>
+
+    <!-- blue -->
+    <div class="plane blue">
+      <div class="ph"><span class="glyph"></span><span class="role">Blue engine</span>
+        <span class="name">Vigil — AI SOC</span><span class="port">FastAPI :6987</span></div>
+      <div class="sub">13 specialist agents on a 24/7 loop turn telemetry into findings, cases, verdicts and gated response.</div>
+      <div class="chips"><span class="chip">24/7 daemon · poll→process→respond</span><span class="chip">13 AI agents</span>
+        <span class="chip">Findings + Cases</span><span class="chip key">approval_actions · 0.90 gate</span>
+        <span class="chip">Bifrost :8080</span></div>
+    </div>
+
+    <div class="conn back"><div class="num">5</div>
+      <div class="lbl"><b>Loop closes → the coordinator scores &amp; governs</b> · reads blue detections + red ground-truth
+        (events.jsonl + Neo4j), computes detection-rate &amp; MTTD, and drives the tiered-autonomy gate → response / approvals → sealed evidence</div></div>
+
+  </div>
+
+  <!-- cross-cutting -->
+  <div class="band-title"><h2>What runs underneath every step</h2><span class="rule"></span></div>
+
+  <div class="card sov" style="margin-bottom:14px">
+    <h3><span class="g" style="background:var(--violet)"></span>Sovereignty — one local brain, zero foreign egress</h3>
+    <p>Both engines route through a single on-prem model. No data or inference leaves the sovereign cloud — the DPDP / CERT-In differentiator no US SaaS can match.</p>
+    <div class="flow">
+      <span class="box">Decepticon → LiteLLM :4000</span>
+      <span class="arrow mono">→</span>
+      <span class="box hub">Ollama :11434 · local LLM</span>
+      <span class="arrow mono">←</span>
+      <span class="box">Bifrost :8080 ← Vigil</span>
+      <span class="box" style="border-color:var(--violet)">🟡 vigil-llm scans every ingested log / tool result</span>
+    </div>
+  </div>
+
+  <div class="grid3">
+    <div class="card">
+      <h3><span class="g" style="background:var(--amber)"></span>Graduated-autonomy governance</h3>
+      <p>One deterministic policy engine gates <em>every</em> state-changing action. An LLM never sets the tier.</p>
+      <div class="tiers">
+        <div class="tier auto"><span class="t">Auto</span><span class="d">Reversible, low blast-radius, time-boxed with <b>auto-expiry</b></span></div>
+        <div class="tier human"><span class="t">Human</span><span class="d">High-impact / irreversible — <b>isolate prod, kill process, patch</b></span></div>
+        <div class="tier never"><span class="t">Never</span><span class="d">Crosses a <b>tenant boundary</b> or touches the <b>control plane</b> — 2-person, always</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3><span class="g" style="background:var(--green)"></span>Immutable evidence</h3>
+      <p>Every red action, blue verdict and response decision lands in a per-tenant, HMAC hash-chained WORM store — tamper-evident, India-resident, the compliance artifact.</p>
+      <p class="mono" style="color:var(--faint);font-size:12px;margin-top:10px">verify_ledger → first_bad_seq · export = signed bundle</p>
+    </div>
+
+    <div class="card">
+      <h3><span class="g" style="background:var(--blue)"></span>Hard verification gate</h3>
+      <p>No finding, verdict or claim ships into scoring, reporting or a response without a reproducible artifact or cited sensor rows. Grounded by construction — the LLM is never believed on its own say-so.</p>
+    </div>
+  </div>
+
+  <div class="band-title"><h2>Why it's defensible — the moat no incumbent ships together</h2><span class="rule"></span></div>
+  <div class="pillars">
+    <div class="pillar"><div class="k">01 · structure</div><div class="v">Sovereign by design</div><div class="x">India-resident models &amp; data, no foreign API, DPDP/CERT-In-native.</div></div>
+    <div class="pillar"><div class="k">02 · product</div><div class="v">Closed loop as a service</div><div class="x">Red findings continuously tune blue — delivered as an ESDS-MSSP offering.</div></div>
+    <div class="pillar"><div class="k">03 · safety</div><div class="v">Graduated autonomy + audit</div><div class="x">Tiered gate + tamper-evident evidence — safe-by-default, never a self-inflicted DoS.</div></div>
+    <div class="pillar"><div class="k">04 · defense</div><div class="v">AI-native threat defense</div><div class="x">The agents themselves are hardened against log-substrate prompt injection.</div></div>
+  </div>
+
+  <footer class="foot">
+    <span>RedBlue AI · closed-loop purple-team architecture</span>
+    <span>Decepticon (red) + Vigil (blue) + coordinator · reuse the engines, build the loop</span>
+  </footer>
+
+</div>
+</div>
