@@ -32,6 +32,10 @@ services:
       - ./wazuh/integrations/custom-vigil:/var/ossec/integrations/custom-vigil:ro
       - ./wazuh/ossec.conf.snippet:/redblue/ossec.conf.snippet:ro   # merge into /var/ossec/etc/ossec.conf
       - ./wazuh/certs:/etc/ssl/wazuh:ro                              # from cert-gen (setup step)
+      # Suricata eve.json read directly by the manager (Wazuh ships native Suricata decoders); no
+      # separate agent container — Wazuh does not publish a wazuh-agent image. Enabled via the
+      # <localfile> in ossec.conf.snippet.
+      - suricata_logs:/var/log/suricata:ro
     networks: [telemetry-net, redblue-shared]
     restart: unless-stopped
 
@@ -73,22 +77,13 @@ services:
     command: ["-i", "eth0"]   # the range-net interface inside the container
     volumes:
       - ./suricata/suricata.yaml:/etc/suricata/suricata.yaml:ro
-      - suricata_logs:/var/log/suricata     # eve.json — read by the shipper below
+      - suricata_logs:/var/log/suricata     # eve.json — read directly by wazuh.manager (shared volume)
     networks: [range-net]
     restart: unless-stopped
 
-  # Ships Suricata eve.json into Wazuh (native Suricata decoders) → same custom-vigil transform.
-  suricata.shipper:
-    image: wazuh/wazuh-agent:${WAZUH_VERSION:-4.9.2}
-    container_name: suricata-shipper
-    environment:
-      - WAZUH_MANAGER=wazuh.manager
-      - WAZUH_AGENT_NAME=suricata-shipper
-    volumes:
-      - suricata_logs:/var/log/suricata:ro
-    depends_on: [wazuh.manager]
-    networks: [telemetry-net, range-net]
-    restart: unless-stopped
+  # NOTE: Suricata → Wazuh is done by the manager tailing eve.json from the shared `suricata_logs`
+  # volume (see the manager's <localfile>), NOT a separate agent container — Wazuh publishes no
+  # `wazuh-agent` image (the agent is a host package). This is the standard single-node pattern.
 
   # ── Falco: container/K8s runtime (eBPF). Runtime sensor. ──
   # NOTE (P2 remaining item): Falco→canonical-finding shaping is not yet wired — options are
