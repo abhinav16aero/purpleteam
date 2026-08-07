@@ -8,16 +8,24 @@
 # OLLAMA_URL is set via --env-file vigil.env (interpolated into every ${OLLAMA_URL:-...}).
 # DEFAULT_MODEL is added here (base default is the CLOUD claude-sonnet-4-6 — the silent
 # fallback plan 03 flagged). Vigil host ports are hardcoded, so the daemon remap uses `!override`.
+#
+# DEV_MODE=true = the P4 sovereign-ENCLAVE posture (memory: P4 enclave = DEV_MODE; P5 = service JWT).
+# The backend/llm-worker fail-closed at import ("JWT_SECRET_KEY required when DEV_MODE=false"), and
+# the coordinator↔Vigil calls are not JWT-authenticated yet, so auth is bypassed inside the enclave.
+# ⚠ SECURITY: flip to DEV_MODE=false + a real JWT_SECRET_KEY (+ wire REDBLUE_VIGIL_TOKEN) BEFORE Vigil
+# is exposed beyond the isolated host (P5). See vigil-governance-gates / plan 08.
 services:
   backend:
     environment:
       - DEFAULT_MODEL=ollama/qwen2.5-coder:7b   # override cloud default → local (plan 03)
+      - DEV_MODE=true                            # enclave-only — see header warning
     networks:
       - redblue-shared          # + deeptempo-network
 
   soc-daemon:
     environment:
       - DEFAULT_MODEL=ollama/qwen2.5-coder:7b
+      - DEV_MODE=true
     ports: !override            # REPLACE the base list (host 8081 → 8082; internal stays 8081)
       - "8082:8081"
       - "9090:9090"
@@ -28,6 +36,7 @@ services:
   llm-worker:
     environment:
       - DEFAULT_MODEL=ollama/qwen2.5-coder:7b
+      - DEV_MODE=true
     networks:
       - redblue-shared          # LLM path (→ bifrost → ollama)
 
