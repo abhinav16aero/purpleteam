@@ -19,8 +19,9 @@ TEL_PROF := $(foreach p,$(PROFILES),--profile $(p))   # e.g. PROFILES=target bri
 help:            ## list targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/ →/' | sort
 
-net:             ## create the shared bus once (idempotent)
+net:             ## create the shared bus + the isolated target range once (idempotent)
 	@docker network inspect redblue-shared >/dev/null 2>&1 || docker network create redblue-shared
+	@docker network inspect range-net      >/dev/null 2>&1 || docker network create range-net
 
 dec-env:         ## Decepticon services use `env_file: .env` — ensure it exists so compose renders
 	@[ -f ../Decepticon/.env ] || { \

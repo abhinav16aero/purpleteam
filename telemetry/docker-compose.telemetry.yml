@@ -129,9 +129,10 @@ volumes:
 networks:
   telemetry-net:
     driver: bridge
-  # range-net: target + Suricata sniff; the Kali sandbox joins this as its ONLY extra attachment
-  # (00 §5) so red can reach the target while staying off redblue-shared.
+  # range-net: target + Suricata sniff + the Kali sandbox (its ONLY extra attachment, 00 §5) so red
+  # can reach the target while staying off redblue-shared. EXTERNAL so the decepticon project's
+  # sandbox and this project's DVWA/Suricata share one L2 — created once by `make net`.
   range-net:
-    driver: bridge
+    external: true
   redblue-shared:
     external: true        # outbound push (manager/sidekick → Vigil :6987) rides the bus

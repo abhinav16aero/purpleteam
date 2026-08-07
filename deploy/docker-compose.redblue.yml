@@ -50,6 +50,14 @@ services:
     networks: [redblue-shared]
     # No depends_on — langgraph/backend live in OTHER Compose projects. Ordering is
     # Makefile-driven (--wait) and the coordinator retries with backoff (plan 07 §2.3).
+    healthcheck:
+      # python (no curl in slim); urlopen raises on non-200 → unhealthy. So `up --wait` and
+      # `make health` reflect the API actually serving, not just the process being up.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8900/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     restart: unless-stopped
 
 volumes:

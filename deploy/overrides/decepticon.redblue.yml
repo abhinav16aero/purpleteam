@@ -6,8 +6,10 @@
 #     -f ../Decepticon/docker-compose.yml -f deploy/overrides/decepticon.redblue.yml up
 #
 # Compose merges service `networks:` lists ADDITIVELY, so we only APPEND redblue-shared;
-# each service keeps its private decepticon-net / sandbox-net. The Kali `sandbox` and
-# `c2-sliver` are deliberately NOT here — they stay isolated on sandbox-net (00 §5).
+# each service keeps its private decepticon-net / sandbox-net. `c2-sliver` stays isolated on
+# sandbox-net. The Kali `sandbox` additionally joins the EXTERNAL `range-net` — its ONLY extra
+# attachment — so red can reach the target range (DVWA) while staying OFF redblue-shared (00 §5);
+# `make health`'s isolation invariant only forbids sandbox on redblue-shared, which still holds.
 # Host-port remaps (postgres 5433, web 3100, terminal 3103) are env-only (decepticon.env);
 # every Decepticon host port is ${VAR:-default}, so no port stanza is needed here.
 services:
@@ -27,6 +29,12 @@ services:
     networks:
       - redblue-shared          # + sandbox-net + decepticon-net  (coordinator reads the KG :7687)
 
+  sandbox:
+    networks:
+      - range-net               # + sandbox-net (private) — the ONLY extra attachment: red → DVWA
+
 networks:
   redblue-shared:
+    external: true
+  range-net:                    # the isolated target range; shared with the telemetry project
     external: true
