@@ -30,12 +30,13 @@ services:
       - wazuh_manager_etc:/var/ossec/etc
       # our Integrator + rules (delivered from telemetry/wazuh/)
       - ./wazuh/integrations/custom-vigil:/var/ossec/integrations/custom-vigil:ro
-      - ./wazuh/ossec.conf.snippet:/redblue/ossec.conf.snippet:ro   # merge into /var/ossec/etc/ossec.conf
-      - ./wazuh/certs:/etc/ssl/wazuh:ro                              # from cert-gen (setup step)
-      # Suricata eve.json read directly by the manager (Wazuh ships native Suricata decoders); no
-      # separate agent container — Wazuh does not publish a wazuh-agent image. Enabled via the
-      # <localfile> in ossec.conf.snippet.
-      - suricata_logs:/var/log/suricata:ro
+      # The COMPLETE manager config, copied over the default on boot via the official config-mount
+      # (0-wazuh-init honours $WAZUH_CONFIG_MOUNT). This is what actually activates the custom-vigil
+      # integration + the Suricata/DVWA localfiles — a bare snippet mount never merges into ossec.conf.
+      - ./wazuh/ossec.conf:/wazuh-config-mount/etc/ossec.conf:ro
+      - ./wazuh/certs:/etc/ssl/wazuh:ro                              # from cert-gen (`make certs`)
+      - suricata_logs:/var/log/suricata:ro                          # Suricata eve.json (native decoders)
+      - dvwa_logs:/var/log/dvwa-apache:ro                           # DVWA apache access log (web-attack rules)
     networks: [telemetry-net, redblue-shared]
     restart: unless-stopped
 
@@ -72,13 +73,20 @@ services:
   suricata:
     image: jasonish/suricata:latest
     container_name: suricata
-    # Sniffs range-net; HOME_NET scoped to the range CIDR in suricata.yaml.
+    profiles: [target]                 # monitors DVWA — only meaningful when the target is up
     cap_add: [NET_ADMIN, NET_RAW, SYS_NICE]
-    command: ["-i", "eth0"]   # the range-net interface inside the container
+    # Share DVWA's network namespace so Suricata actually SEES the unicast attack traffic. A Linux
+    # bridge floods only broadcast to a passive sniffer, so a range-net-attached Suricata would miss
+    # the sandbox→DVWA HTTP flows entirely. In DVWA's netns, `-i eth0` is DVWA's interface.
+    network_mode: "service:dvwa"
+    # Best-effort ET Open ruleset (needs egress; the base image ships none) then sniff. Under egress
+    # lockdown `suricata-update` fails → falls back to whatever rules are present (run it once online).
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["suricata-update --no-test 2>/dev/null || true; exec suricata -i eth0 -vvv"]
     volumes:
       - ./suricata/suricata.yaml:/etc/suricata/suricata.yaml:ro
       - suricata_logs:/var/log/suricata     # eve.json — read directly by wazuh.manager (shared volume)
-    networks: [range-net]
+    depends_on: [dvwa]
     restart: unless-stopped
 
   # NOTE: Suricata → Wazuh is done by the manager tailing eve.json from the shared `suricata_logs`
@@ -117,6 +125,8 @@ services:
     container_name: range-dvwa
     networks: [range-net]
     profiles: [target]
+    volumes:
+      - dvwa_logs:/var/log/apache2       # share the apache access log with wazuh.manager (web-attack rules)
     restart: unless-stopped
   # A Wazuh agent on the target host would enroll to wazuh.manager:1515 (runtime step; see README).
 
@@ -125,6 +135,7 @@ volumes:
   wazuh_manager_etc:
   wazuh_indexer_data:
   suricata_logs:
+  dvwa_logs:
 
 networks:
   telemetry-net:

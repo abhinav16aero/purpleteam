@@ -1,0 +1,11 @@
+# One-time Wazuh TLS cert generation (P2 / plan 04). Run from telemetry/ (or via `make certs`):
+#   docker compose -f generate-indexer-certs.yml run --rm generator
+# Reads config/certs.yml and writes root-ca / admin / per-node PEMs into wazuh/certs/, which the
+# manager, indexer, and dashboard mount read-only. Idempotent-ish: re-running regenerates the certs.
+services:
+  generator:
+    image: wazuh/wazuh-certs-generator:0.0.2
+    hostname: wazuh-certs-generator
+    volumes:
+      - ./wazuh/certs/:/certificates/
+      - ./config/certs.yml:/config/certs.yml

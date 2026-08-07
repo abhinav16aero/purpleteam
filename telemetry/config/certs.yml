@@ -1,0 +1,14 @@
+# Wazuh TLS cert topology (P2 / plan 04). Node names MUST match the compose hostnames in
+# telemetry/docker-compose.telemetry.yml (indexer→wazuh.indexer, server→wazuh-manager,
+# dashboard→wazuh.dashboard). Consumed by `make certs` → wazuh/wazuh-certs-generator, which
+# writes the PEMs into telemetry/wazuh/certs/ (the dir the three `./wazuh/certs` mounts expect).
+nodes:
+  indexer:
+    - name: wazuh.indexer
+      ip: wazuh.indexer
+  server:
+    - name: wazuh-manager
+      ip: wazuh-manager
+  dashboard:
+    - name: wazuh.dashboard
+      ip: wazuh.dashboard

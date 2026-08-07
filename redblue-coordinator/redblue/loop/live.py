@@ -42,22 +42,34 @@ class _ConnectorRed:
 
     async def launch(self, *, engagement, workspace, sandbox_url, tenant, instruction) -> dict:
         events_path = Path(workspace) / "events.jsonl"
-        events_path.parent.mkdir(parents=True, exist_ok=True)
         start = self._clock()
         captured = 0
-        # truncate-per-launch so a re-run of the same engagement can't double-count captured events
-        with events_path.open("w", encoding="utf-8") as fh:
-            async for chunk in self._driver.launch(
-                engagement=engagement, workspace=workspace, sandbox_url=sandbox_url,
-                tenant=tenant, instruction=instruction,
-            ):
-                rec = event_from_chunk(chunk, self._clock())
-                if rec is not None:
-                    fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
-                    fh.flush()
-                    captured += 1
-        return {"thread_id": engagement, "run_id": None, "status": "success",
-                "started_at": start, "ended_at": self._clock(), "events_captured": captured}
+        error: str | None = None
+        # A red-run/stream failure (Decepticon LLM unconfigured, stream error) OR an unwritable
+        # workspace must NOT abort the engagement: capture it and return a terminal 'failed' red_run
+        # so the loop still scores (attacked: 0) and the engagement COMPLETES instead of 502ing.
+        # mkdir + open are INSIDE the try so a workspace-IO failure also degrades gracefully.
+        try:
+            events_path.parent.mkdir(parents=True, exist_ok=True)
+            # truncate-per-launch so a re-run of the same engagement can't double-count captured events
+            with events_path.open("w", encoding="utf-8") as fh:
+                async for chunk in self._driver.launch(
+                    engagement=engagement, workspace=workspace, sandbox_url=sandbox_url,
+                    tenant=tenant, instruction=instruction,
+                ):
+                    rec = event_from_chunk(chunk, self._clock())
+                    if rec is not None:
+                        fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                        fh.flush()
+                        captured += 1
+        except Exception as e:  # noqa: BLE001 — red-run/stream/IO failure must not abort the engagement
+            error = f"{type(e).__name__}: {e}"
+        red_run = {"thread_id": engagement, "run_id": None,
+                   "status": "failed" if error else "success",
+                   "started_at": start, "ended_at": self._clock(), "events_captured": captured}
+        if error:
+            red_run["error"] = error
+        return red_run
 
 
 class _EventsAttackSource:

@@ -25,6 +25,25 @@ def _mint_slug(tenant_id: str) -> str:
     return f"eng-{tenant_id}-{day}-{secrets.token_hex(2)}"
 
 
+def _default_instruction(scope: dict | None) -> str:
+    """A red directive synthesised from scope.in_scope when the caller gives no instruction.
+
+    Decepticon's red agents take their target only from the prose instruction, so this turns a
+    structured `in_scope` list into an explicit, authorised task naming the hosts (e.g. range-dvwa).
+    """
+    targets = [str(t) for t in ((scope or {}).get("in_scope") or []) if t]
+    if targets:
+        return (
+            f"Recon and exploit the in-scope target(s): {', '.join(targets)}. These are authorised "
+            "and in scope. Start with nmap service discovery, then probe web endpoints for "
+            "injection/auth flaws, and validate each finding with a concrete proof."
+        )
+    return (
+        "Run the scoped engagement per the OPPLAN: recon the authorised in-scope assets, then attempt "
+        "exploitation of the highest-value findings and validate each."
+    )
+
+
 @router.post("/api/engagements", response_model=EngagementCreatedResponse)
 async def create_engagement(req: CreateEngagementRequest, request: Request) -> EngagementCreatedResponse:
     st = request.app.state
@@ -46,7 +65,12 @@ async def create_engagement(req: CreateEngagementRequest, request: Request) -> E
     loop_input = {
         "engagement_id": eng_id, "tenant_id": req.tenant_id, "mode": req.mode,
         "scope": req.scope, "enforcement_mode": req.enforcement_mode,
-        "hitl_enabled": req.hitl_enabled, "instruction": req.instruction or "",
+        "hitl_enabled": req.hitl_enabled,
+        # The natural-language instruction is the ONLY target directive that reaches Decepticon's red
+        # agents (no structured target field does), so an empty instruction = red with no task. When
+        # the caller gives none, synthesize one from scope.in_scope so a structured scope still drives
+        # the attack (name the in-scope hosts, e.g. "range-dvwa").
+        "instruction": req.instruction or _default_instruction(req.scope),
         "version": 1,
     }
     # Run the loop; on ANY node failure, mark the engagement FAILED (never leave it stuck RUNNING)

@@ -13,23 +13,33 @@ PROFILES ?=
 DEC_PROF := $(foreach p,$(PROFILES),--profile $(p))
 VIG_PROF := $(foreach p,$(PROFILES),--profile $(p))
 TEL_PROF := $(foreach p,$(PROFILES),--profile $(p))   # e.g. PROFILES=target brings up the DVWA victim
+# red+blue local model; override on the CLI: make ollama OLLAMA_MODEL=<tag>. (No inline comment on
+# the next line — Make would fold the trailing spaces into the value and break `ollama pull`.)
+OLLAMA_MODEL ?= qwen2.5-coder:7b
 
-.PHONY: net dec-env ollama red-only blue-only telemetry lab up down logs ps config health clean help
+.PHONY: net dec-env ollama certs red-only blue-only telemetry lab up down logs ps config health clean help
 
 help:            ## list targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/ →/' | sort
 
 net:             ## create the shared bus + the isolated target range once (idempotent)
 	@docker network inspect redblue-shared >/dev/null 2>&1 || docker network create redblue-shared
-	@docker network inspect range-net      >/dev/null 2>&1 || docker network create range-net
+	@docker network inspect range-net      >/dev/null 2>&1 || docker network create --subnet 10.20.0.0/24 range-net
 
-dec-env:         ## Decepticon services use `env_file: .env` — ensure it exists so compose renders
+dec-env:         ## write ../Decepticon/.env with the SOVEREIGN Ollama keys if absent (doc 03)
 	@[ -f ../Decepticon/.env ] || { \
-	  echo "[deploy] creating minimal ../Decepticon/.env stub (replaced by 'decepticon onboard' / doc 03)"; \
-	  printf '# minimal stub for compose render; real LLM auth added in doc 03 / by decepticon onboard\n' > ../Decepticon/.env; }
+	  echo "[deploy] writing sovereign ../Decepticon/.env (Ollama-only; no cloud keys)"; \
+	  { echo '# RedBlue sovereign defaults (doc 03) — local Ollama only, zero cloud egress.'; \
+	    echo 'OLLAMA_API_BASE=http://ollama:11434'; \
+	    echo 'OLLAMA_MODEL=$(OLLAMA_MODEL)'; \
+	    echo 'DECEPTICON_AUTH_PRIORITY=ollama_local'; \
+	    echo '# Leave ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY UNSET to stay sovereign.'; \
+	  } > ../Decepticon/.env; }
 
-ollama: net      ## P1: bring up the shared Ollama
-	$(CO) up -d ollama
+ollama: net      ## P1: bring up shared Ollama AND pull the model (red/blue LLM calls 404 without it)
+	$(CO) up -d --wait ollama
+	@echo "[deploy] pulling $(OLLAMA_MODEL) into redblue-ollama (idempotent — skips if present)…"
+	@docker exec redblue-ollama ollama pull $(OLLAMA_MODEL)
 
 red-only: net dec-env  ## P0/P1: Decepticon standalone (core profile)
 	$(DEC) $(DEC_PROF) up -d --wait
@@ -37,7 +47,12 @@ red-only: net dec-env  ## P0/P1: Decepticon standalone (core profile)
 blue-only: net   ## P0/P1: Vigil standalone (core profile)
 	$(VIG) $(VIG_PROF) up -d --wait
 
-telemetry: net   ## P2: sensor plane (Wazuh/Suricata/Falco). HEAVY — needs sysctl vm.max_map_count=262144. Add PROFILES=target for DVWA
+certs:           ## P2: one-time Wazuh TLS cert generation → telemetry/wazuh/certs/ (auto-run by telemetry)
+	@[ -f ../telemetry/wazuh/certs/root-ca.pem ] || \
+	  docker compose -f ../telemetry/generate-indexer-certs.yml run --rm generator
+	@echo "[deploy] Wazuh certs present in telemetry/wazuh/certs/"
+
+telemetry: net certs  ## P2: sensor plane (Wazuh/Suricata/Falco). HEAVY — needs sysctl vm.max_map_count=262144. Add PROFILES=target for DVWA
 	$(TEL) $(TEL_PROF) up -d --wait
 
 lab: red-only blue-only telemetry  ## P2: engines + sensors (the purple loop minus coordinator)

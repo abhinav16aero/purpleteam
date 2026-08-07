@@ -98,3 +98,26 @@ async def test_connector_red_captures_stream_to_events_jsonl(tmp_path):
     assert attacks == [
         {"technique": "T1190", "entity": "10.20.0.9", "ts": 1002.0, "red_action_id": "FIND-1"},
     ]
+
+
+class _BoomDriver:
+    """RedDriver stand-in whose stream errors (e.g. Decepticon's LLM is unconfigured)."""
+
+    async def launch(self, **_kw):
+        if self._chunks_never:  # always False — keeps `launch` an async generator that then raises
+            yield None
+        raise RuntimeError("decepticon LLM unconfigured")
+
+    _chunks_never = False
+
+
+async def test_connector_red_degrades_to_failed_instead_of_raising(tmp_path):
+    # a red-run failure must NOT propagate (which would 502 the whole engagement) — it returns a
+    # terminal status:"failed" red_run so the loop still scores attacked:0 and completes.
+    red = _ConnectorRed(_BoomDriver(), clock=lambda: 5.0)
+    run = await red.launch(engagement="eng-x", workspace=str(tmp_path / "eng-x"),
+                           sandbox_url="http://sandbox:9999", tenant="acme", instruction="go")
+    assert run["status"] == "failed"
+    assert "RuntimeError" in run["error"]
+    assert run["events_captured"] == 0
+    assert run["started_at"] == 5.0 and run["ended_at"] == 5.0
