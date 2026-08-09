@@ -16,6 +16,7 @@ class CreateEngagementRequest(BaseModel):
     enforcement_mode: str = "enforce"
     hitl_enabled: bool = True
     roe_ref: str | None = None
+    simulate: bool = False                           # skip the live red run; score pre-seeded KG/Vigil data
 
 
 class EngagementCreatedResponse(BaseModel):

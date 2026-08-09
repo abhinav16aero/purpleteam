@@ -38,6 +38,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["redblue"]
+artifacts = ["redblue/api/static/*.html"]   # ship the served dashboard in the wheel/image
 
 [tool.ruff]
 line-length = 100

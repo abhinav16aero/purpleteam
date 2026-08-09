@@ -1,0 +1,236 @@
+<!-- RedBlue Console — single-file dashboard, served by the coordinator (same origin as /api → no CORS).
+     Vanilla JS + inline SVG (no CDN/deps → works under any CSP, over an SSH tunnel to :8900). -->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RedBlue Console</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#141922; --panel2:#1b2230; --line:#232a36;
+    --tx:#c9d1d9; --muted:#8b949e; --faint:#5b6472;
+    --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --ok:#3fb950; --warn:#d29922; --crit:#f85149;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 500px at 70% -10%,#12202e 0,var(--bg) 60%);color:var(--tx);font:14px/1.5 var(--sans)}
+  header{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(11,14,20,.85);backdrop-filter:blur(6px);z-index:5}
+  .logo{font-weight:800;letter-spacing:.5px}
+  .logo .r{color:var(--red)} .logo .b{color:var(--blue)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--faint);display:inline-block}
+  .dot.up{background:var(--ok);box-shadow:0 0 8px var(--ok)} .dot.down{background:var(--crit)}
+  nav{display:flex;gap:4px;margin-left:8px}
+  nav button{background:none;border:0;color:var(--muted);padding:8px 14px;border-radius:8px;cursor:pointer;font:inherit}
+  nav button.on{color:var(--tx);background:var(--panel2)}
+  .grow{flex:1}
+  .muted{color:var(--muted)} .faint{color:var(--faint)} .mono{font-family:var(--mono)}
+  main{padding:20px;max-width:1200px;margin:0 auto}
+  .grid{display:grid;gap:14px}
+  .kpis{grid-template-columns:repeat(4,1fr)}
+  .cols2{grid-template-columns:1fr 1fr}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .panel h3{margin:0 0 12px;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  .kpi .v{font-size:30px;font-weight:800;font-family:var(--mono)}
+  .kpi .l{font-size:12px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--faint);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  td{padding:8px 8px;border-bottom:1px solid #1a212c;font-family:var(--mono)}
+  tr.click{cursor:pointer} tr.click:hover td{background:var(--panel2)}
+  tr.sel td{background:#182234}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-family:var(--mono);border:1px solid var(--line)}
+  .pill.ok{color:var(--ok);border-color:#1f3d29} .pill.bad{color:var(--crit);border-color:#4a1f1f}
+  .pill.run{color:var(--warn);border-color:#4a3d1f} .pill.blue{color:var(--blue);border-color:#1f3350}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--tx);padding:8px 14px;border-radius:8px;cursor:pointer;font:inherit}
+  .btn:hover{border-color:var(--blue)}
+  .btn.primary{background:linear-gradient(180deg,#1f6feb,#175bce);border-color:#175bce;color:#fff}
+  .btn.kill{background:#3a1417;border-color:#5a1f24;color:var(--red);font-weight:700}
+  input,select{background:var(--bg);border:1px solid var(--line);color:var(--tx);padding:7px 10px;border-radius:8px;font:inherit}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;max-height:280px;overflow:auto;font-size:12px;margin:0}
+  .bar{height:10px;border-radius:6px;background:#1a212c;overflow:hidden;display:flex}
+  .bar i{display:block;height:100%}
+  .tech{display:inline-block;padding:1px 7px;margin:2px;border-radius:6px;font-family:var(--mono);font-size:12px;border:1px solid var(--line)}
+  .tech.d{color:var(--ok);border-color:#1f3d29;background:#0f1c14}
+  .tech.m{color:var(--crit);border-color:#4a1f1f;background:#1c1113}
+  .empty{color:var(--faint);text-align:center;padding:30px}
+  a{color:var(--blue)}
+</style>
+
+<header>
+  <span class="logo"><span class="r">Red</span><span class="b">Blue</span> Console</span>
+  <nav id="nav"></nav>
+  <span class="grow"></span>
+  <span class="muted mono" id="clock"></span>
+  <span class="muted">coordinator <span class="dot" id="status"></span></span>
+  <label class="muted" style="cursor:pointer"><input type="checkbox" id="auto" checked> auto</label>
+</header>
+<main id="view"></main>
+
+<script>
+const $ = (s,r=document)=>r.querySelector(s);
+const el = (t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+async function j(path,opts){const r=await fetch(path,opts);if(!r.ok)throw new Error(path+' '+r.status);return r.json();}
+const fmtSecs = s => s==null?'—':(s<60?Math.round(s)+'s':(s/60).toFixed(1)+'m');
+const pct = f => f==null?'—':Math.round(f*100)+'%';
+const TABS = ['Posture','Engagements','Graph','Evidence'];
+let tab = location.hash.slice(1)||'Posture'; if(!TABS.includes(tab)) tab='Posture';
+let selected = null, es = null;
+
+function donut(frac){ // detected fraction 0..1 → svg donut
+  const r=52,c=2*Math.PI*r,det=(frac||0)*c,mis=c-det;
+  return `<svg viewBox="0 0 140 140" width="150" height="150" style="transform:rotate(-90deg)">
+    <circle cx=70 cy=70 r=${r} fill=none stroke=#1a212c stroke-width=16/>
+    <circle cx=70 cy=70 r=${r} fill=none stroke=var(--crit) stroke-width=16 stroke-dasharray="${mis} ${c}" stroke-dashoffset="${-det}"/>
+    <circle cx=70 cy=70 r=${r} fill=none stroke=var(--ok) stroke-width=16 stroke-dasharray="${det} ${c}" stroke-linecap=round/>
+    <text x=70 y=70 fill=var(--tx) font-size=22 font-family=var(--mono) text-anchor=middle dominant-baseline=central transform="rotate(90 70 70)">${pct(frac)}</text>
+  </svg>`;
+}
+function statusPill(s){const m={completed:'ok',running:'run',failed:'bad'};return `<span class="pill ${m[s]||'blue'}">${s||'—'}</span>`;}
+
+async function renderPosture(v){
+  let p; try{ p=await j('/api/posture'); }catch(e){ v.innerHTML='<div class="empty">Coordinator unreachable.</div>'; return; }
+  const {attacked,detected}=p.totals||{attacked:0,detected:0};
+  const cov=p.attack_coverage||{attacked:0,detected:0};
+  v.innerHTML='';
+  const k=el('div','grid kpis'); k.innerHTML=[
+    ['Detection rate',pct(p.detection_rate)],['Attacked / Detected',attacked+' / '+detected],
+    ['MTTD (mean)',fmtSecs((p.mttd||{}).mean)],['Coverage gaps',p.gap_count??0]
+  ].map(([l,val])=>`<div class="panel kpi"><div class="l">${l}</div><div class="v">${val}</div></div>`).join('');
+  v.appendChild(k);
+  const two=el('div','grid cols2'); two.style.marginTop='14px';
+  const cmax=Math.max(1,cov.attacked);
+  two.innerHTML=`
+    <div class="panel"><h3>Attacked vs Detected</h3><div style="display:flex;gap:18px;align-items:center">
+      ${donut(p.detection_rate)}
+      <div><div><span class="tech d">■</span> detected ${detected}</div><div><span class="tech m">■</span> missed ${Math.max(0,attacked-detected)}</div><div class="muted" style="margin-top:6px">${(p.detected_techniques||[]).length} of ${(p.attacked_techniques||[]).length} techniques</div></div></div></div>
+    <div class="panel"><h3>ATT&CK coverage</h3>
+      <div class="muted" style="font-size:12px">attacked ${cov.attacked}</div><div class="bar" style="margin:4px 0 12px"><i style="width:100%;background:var(--red)"></i></div>
+      <div class="muted" style="font-size:12px">detected ${cov.detected}</div><div class="bar"><i style="width:${cov.detected/cmax*100}%;background:var(--ok)"></i></div></div>`;
+  v.appendChild(two);
+  const gp=el('div','panel'); gp.style.marginTop='14px';
+  const gaps=p.top_gaps||[];
+  gp.innerHTML='<h3>False-negative watchlist (attacked, never detected)</h3>'+(gaps.length?
+    '<table><thead><tr><th>Technique</th><th>Target</th></tr></thead><tbody>'+gaps.map(g=>`<tr><td>${g.technique_id}</td><td>${g.entity??'—'}</td></tr>`).join('')+'</tbody></table>'
+    :'<div class="empty">No gaps — every attacked technique was detected. ✓</div>');
+  v.appendChild(gp);
+}
+
+async function renderEngagements(v){
+  v.innerHTML='';
+  const ctl=el('div','panel'); ctl.innerHTML=`<h3>Launch</h3>
+    <div class="row">
+      <input id="e_ten" value="demo" size=8 placeholder="tenant">
+      <input id="e_tgt" value="range-dvwa" size=14 placeholder="target (in_scope)">
+      <label class="muted" style="cursor:pointer"><input type="checkbox" id="e_sim" checked> simulate</label>
+      <button class="btn primary" id="e_go">Launch engagement</button>
+      <span class="grow"></span>
+      <button class="btn kill" id="e_kill">■ KILL SWITCH</button>
+    </div><div class="muted mono" id="e_msg" style="margin-top:8px"></div>`;
+  v.appendChild(ctl);
+  const list=el('div','panel'); list.style.marginTop='14px'; list.innerHTML='<h3>Engagements</h3><div id="e_list" class="muted">loading…</div>';
+  v.appendChild(list);
+  const detail=el('div','', ''); detail.id='e_detail'; detail.style.marginTop='14px'; v.appendChild(detail);
+
+  $('#e_go').onclick=async()=>{
+    const body={tenant_id:$('#e_ten').value||'demo',simulate:$('#e_sim').checked,
+      scope:{in_scope:[$('#e_tgt').value||'range-dvwa'],sandbox_url:'http://sandbox:9999'}};
+    $('#e_msg').textContent='launching…';
+    try{const r=await j('/api/engagements',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+      $('#e_msg').textContent='→ '+r.engagement_id+'  status='+r.status+'  rate='+pct(r.detection_rate);
+      await loadList(); openDetail(r.engagement_id);
+    }catch(e){$('#e_msg').textContent='launch failed: '+e.message+' (rebuild coordinator for simulate?)';}
+  };
+  $('#e_kill').onclick=async()=>{ if(!confirm('KILL SWITCH — halt ALL engagements?'))return;
+    try{await j('/api/kill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({by:'console',reason:'manual'})});$('#e_msg').textContent='kill switch engaged.';}catch(e){$('#e_msg').textContent='kill failed: '+e.message;}};
+
+  async function loadList(){
+    let rows; try{rows=await j('/api/engagements');}catch(e){$('#e_list').innerHTML='<div class="empty">Coordinator unreachable.</div>';return;}
+    rows=Array.isArray(rows)?rows:(rows.engagements||rows.data||[]);
+    if(!rows.length){$('#e_list').innerHTML='<div class="empty">No engagements yet — launch one above.</div>';return;}
+    $('#e_list').innerHTML='<table><thead><tr><th>Engagement</th><th>Tenant</th><th>Status</th><th>Detection</th></tr></thead><tbody>'+
+      rows.map(r=>`<tr class="click ${r.engagement_id===selected?'sel':''}" data-id="${r.engagement_id}"><td>${r.engagement_id}</td><td>${r.tenant_id??'—'}</td><td>${statusPill(r.status)}</td><td>${pct(r.detection_rate)}</td></tr>`).join('')+'</tbody></table>';
+    $('#e_list').querySelectorAll('tr.click').forEach(tr=>tr.onclick=()=>openDetail(tr.dataset.id));
+  }
+  window._loadList=loadList; await loadList();
+  if(selected) openDetail(selected);
+}
+
+async function openDetail(id){
+  selected=id;
+  document.querySelectorAll('#e_list tr.click').forEach(t=>t.classList.toggle('sel',t.dataset.id===id));
+  const d=$('#e_detail'); if(!d)return; d.innerHTML='<div class="panel muted">loading scorecard…</div>';
+  let sc; try{sc=await j('/api/engagements/'+id+'/scorecard');}catch(e){d.innerHTML='<div class="panel empty">No scorecard for '+id+'.</div>';return;}
+  const techs=(sc.attacked_techniques||[]).map(t=>{const hit=(sc.detected_techniques||[]).includes(t);return `<span class="tech ${hit?'d':'m'}">${hit?'✔':'✘'} ${t}</span>`;}).join(' ');
+  const pf=sc.per_finding||[];
+  d.innerHTML=`<div class="panel"><div class="row"><h3 style="margin:0">Scorecard — ${id}</h3><span class="grow"></span>
+      <span class="muted mono">rate ${pct(sc.detection_rate)} · MTTD ${fmtSecs((sc.mttd||{}).mean)}</span></div>
+    <div style="margin:10px 0">${techs||'<span class="faint">no attacks recorded</span>'}</div>
+    <table><thead><tr><th>Technique</th><th>Target</th><th>Red @</th><th>Blue @</th><th>Detected</th><th>MTTD</th></tr></thead><tbody>
+      ${pf.map(f=>`<tr><td>${f.technique}</td><td>${f.entity??'—'}</td><td>${f.red_action_ts?.toFixed?.(0)??'—'}</td><td>${f.blue_detect_ts?.toFixed?.(0)??'—'}</td><td>${f.detected?'<span class=\"pill ok\">yes</span>':'<span class=\"pill bad\">no</span>'}</td><td>${fmtSecs(f.mttd_seconds)}</td></tr>`).join('')||'<tr><td colspan=6 class="empty">no findings</td></tr>'}
+    </tbody></table></div>
+    <div class="panel" style="margin-top:14px"><div class="row"><h3 style="margin:0">Live timeline</h3><span class="grow"></span><button class="btn" id="t_stop">stop stream</button></div>
+      <pre id="t_log">connecting to event stream…</pre></div>`;
+  if(es){es.close();es=null;}
+  const log=$('#t_log'); log.textContent='';
+  try{ es=new EventSource('/api/engagements/'+id+'/events');
+    es.onmessage=e=>{log.textContent+=(e.data||'')+'\n';log.scrollTop=log.scrollHeight;};
+    es.onerror=()=>{log.textContent+='[stream ended]\n';es&&es.close();};
+  }catch(e){log.textContent='SSE unavailable';}
+  $('#t_stop').onclick=()=>{es&&es.close();es=null;log.textContent+='[stopped]\n';};
+}
+
+async function renderEvidence(v){
+  v.innerHTML='<div class="panel"><h3>Evidence ledger</h3><div class="row"><input id="ev_id" size=32 placeholder="engagement_id" value="'+(selected||'')+'"><button class="btn" id="ev_go">verify chain</button><span id="ev_badge"></span></div><div id="ev_body" style="margin-top:12px"></div></div>';
+  $('#ev_go').onclick=async()=>{
+    const id=$('#ev_id').value.trim(); if(!id)return;
+    $('#ev_body').innerHTML='<div class="muted">loading…</div>';
+    let ev; try{ev=await j('/api/engagements/'+id+'/evidence?verify=true');}catch(e){$('#ev_body').innerHTML='<div class="empty">No evidence for '+id+'.</div>';return;}
+    $('#ev_badge').innerHTML=ev.verified?'<span class="pill ok">chain verified ✓</span>':'<span class="pill bad">chain broken ✗</span>';
+    const recs=ev.records||[];
+    $('#ev_body').innerHTML='<table><thead><tr><th>#</th><th>actor</th><th>record</th><th>this_hash</th></tr></thead><tbody>'+
+      recs.map(r=>`<tr><td>${r.seq}</td><td>${r.actor}</td><td>${r.record_type}</td><td class="faint">${(r.this_hash||'').slice(0,16)}…</td></tr>`).join('')+'</tbody></table>';
+  };
+  if(selected) $('#ev_go').click();
+}
+
+function forceSvg(g,W,H){
+  const idx={}; g.nodes.forEach((n,i)=>{const a=i/g.nodes.length*6.283;n.x=W/2+Math.cos(a)*150;n.y=H/2+Math.sin(a)*120;n.vx=0;n.vy=0;idx[n.id]=n;});
+  for(let it=0;it<320;it++){
+    for(let a=0;a<g.nodes.length;a++)for(let b=a+1;b<g.nodes.length;b++){const na=g.nodes[a],nb=g.nodes[b];let dx=na.x-nb.x,dy=na.y-nb.y,d2=dx*dx+dy*dy||1;const d=Math.sqrt(d2),f=3200/d2;na.vx+=dx/d*f;na.vy+=dy/d*f;nb.vx-=dx/d*f;nb.vy-=dy/d*f;}
+    g.edges.forEach(e=>{const s=idx[e.source],t=idx[e.target];if(!s||!t)return;let dx=t.x-s.x,dy=t.y-s.y,d=Math.sqrt(dx*dx+dy*dy)||1,f=(d-95)*0.03;s.vx+=dx/d*f;s.vy+=dy/d*f;t.vx-=dx/d*f;t.vy-=dy/d*f;});
+    g.nodes.forEach(n=>{n.vx+=(W/2-n.x)*0.003;n.vy+=(H/2-n.y)*0.003;n.x+=Math.max(-8,Math.min(8,n.vx));n.y+=Math.max(-8,Math.min(8,n.vy));n.vx*=0.82;n.vy*=0.82;n.x=Math.max(24,Math.min(W-140,n.x));n.y=Math.max(20,Math.min(H-20,n.y));});
+  }
+  const col=n=>n.kind==='host'?'var(--warn)':n.kind==='technique'?'var(--blue)':(n.detected?'var(--ok)':'var(--crit)');
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const E=g.edges.map(e=>{const s=idx[e.source],t=idx[e.target];return(!s||!t)?'':`<line x1=${s.x.toFixed(1)} y1=${s.y.toFixed(1)} x2=${t.x.toFixed(1)} y2=${t.y.toFixed(1)} stroke="#2a323f"/>`;}).join('');
+  const N=g.nodes.map(n=>{const r=n.kind==='host'?9:7,c=col(n);
+    const shape=n.kind==='technique'
+      ?`<rect x=${(n.x-r).toFixed(1)} y=${(n.y-r).toFixed(1)} width=${2*r} height=${2*r} transform="rotate(45 ${n.x.toFixed(1)} ${n.y.toFixed(1)})" fill="${c}"/>`
+      :`<circle cx=${n.x.toFixed(1)} cy=${n.y.toFixed(1)} r=${r} fill="${c}"/>`;
+    return `${shape}<text x=${(n.x+r+3).toFixed(1)} y=${(n.y+3).toFixed(1)} font-size=10 fill="var(--muted)" font-family="var(--mono)">${esc((n.label||n.id).slice(0,24))}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="background:var(--bg);border:1px solid var(--line);border-radius:8px">${E}${N}</svg>`;
+}
+async function renderGraph(v){
+  v.innerHTML=`<div class="panel"><div class="row"><h3 style="margin:0">Attack graph</h3>
+    <input id="g_id" size=30 placeholder="engagement_id" value="${selected||''}">
+    <button class="btn" id="g_go">load</button><span class="grow"></span>
+    <span class="muted" style="font-size:12px"><span style="color:var(--warn)">●</span> host &nbsp;<span style="color:var(--ok)">●</span> detected &nbsp;<span style="color:var(--crit)">●</span> missed &nbsp;<span style="color:var(--blue)">◆</span> technique</span>
+    </div><div id="g_wrap" style="margin-top:10px"></div></div>`;
+  const go=async()=>{const id=$('#g_id').value.trim();if(!id){$('#g_wrap').innerHTML='<div class="empty">Enter an engagement id.</div>';return;}
+    $('#g_wrap').innerHTML='<div class="muted">loading…</div>';
+    let g;try{g=await j('/api/engagements/'+id+'/graph');}catch(e){$('#g_wrap').innerHTML='<div class="empty">graph unavailable</div>';return;}
+    $('#g_wrap').innerHTML=(g.nodes&&g.nodes.length)?forceSvg(g,900,460)
+      :'<div class="empty">No attack graph for this engagement — is the KG populated? (try <span class="mono">demo-seed.sh</span>, or set REDBLUE_DECEPTICON_NEO4J_PASSWORD)</div>';};
+  $('#g_go').onclick=go; if(selected) go();
+}
+const RENDER={Posture:renderPosture,Engagements:renderEngagements,Graph:renderGraph,Evidence:renderEvidence};
+function draw(){
+  $('#nav').innerHTML=TABS.map(t=>`<button class="${t===tab?'on':''}" data-t="${t}">${t}</button>`).join('');
+  $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{if(es){es.close();es=null;}tab=b.dataset.t;location.hash=tab;draw();});
+  RENDER[tab]($('#view'));
+}
+async function ping(){try{await j('/api/health');$('#status').className='dot up';}catch(e){$('#status').className='dot down';}}
+setInterval(()=>{$('#clock').textContent=new Date().toLocaleTimeString();},1000);
+setInterval(()=>{ping(); if($('#auto').checked && tab==='Posture') RENDER.Posture($('#view'));},10000);
+ping(); draw();
+</script>

@@ -71,6 +71,7 @@ async def create_engagement(req: CreateEngagementRequest, request: Request) -> E
         # the caller gives none, synthesize one from scope.in_scope so a structured scope still drives
         # the attack (name the in-scope hosts, e.g. "range-dvwa").
         "instruction": req.instruction or _default_instruction(req.scope),
+        "simulate": req.simulate,                    # skip the live red run; score pre-seeded data
         "version": 1,
     }
     # Run the loop; on ANY node failure, mark the engagement FAILED (never leave it stuck RUNNING)

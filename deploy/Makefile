@@ -34,6 +34,9 @@ dec-env:         ## write ../Decepticon/.env with the SOVEREIGN Ollama keys if a
 	    echo 'OLLAMA_API_BASE=http://ollama:11434'; \
 	    echo 'OLLAMA_MODEL=$(OLLAMA_MODEL)'; \
 	    echo 'DECEPTICON_AUTH_PRIORITY=ollama_local'; \
+	    echo '# CPU inference is slow — give each agent turn generous timeouts or the run APITimeouts.'; \
+	    echo 'DECEPTICON_LLM__TIMEOUT=900'; \
+	    echo 'DECEPTICON_LLM_TIMEOUT_SECONDS=900'; \
 	    echo '# Leave ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY UNSET to stay sovereign.'; \
 	  } > ../Decepticon/.env; }
 

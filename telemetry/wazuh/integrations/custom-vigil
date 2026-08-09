@@ -42,9 +42,14 @@ def _severity(level) -> str:
 
 
 def _mitre_predictions(rule: dict) -> dict:
-    """rule.mitre.id → {technique_id: 1.0}. Technique-ID keys only (plan 05 §1.4)."""
+    """MITRE technique IDs → {technique_id: 1.0}. Technique-ID keys only (plan 05 §1.4).
+
+    Wazuh emits MITRE in TWO shapes depending on the rule/decoder: nested `rule.mitre.id`
+    (standard ruleset) and flat `rule.mitre_techniques` (SCA and some integrations). Read both,
+    or techniques silently vanish and the finding never scores as a detection.
+    """
     mitre = (rule.get("mitre") or {})
-    ids = mitre.get("id") or []
+    ids = mitre.get("id") or rule.get("mitre_techniques") or rule.get("mitre_technique") or []
     if isinstance(ids, str):
         ids = [ids]
     out = {}

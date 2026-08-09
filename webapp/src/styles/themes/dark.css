@@ -1,0 +1,54 @@
+/**
+ * Dark Theme
+ * Default theme - these values are already set in semantic.css
+ * This file exists for explicit dark mode application via data-theme="dark"
+ */
+
+[data-theme="dark"] {
+  /* Backgrounds (black olive) */
+  --bg-primary: #242527;
+  --bg-secondary: #2a2b2e;
+  --bg-tertiary: #303135;
+  --bg-quaternary: #3a3b40;
+  --bg-elevated: #303135;
+  --bg-hover: #303135;
+  --bg-active: #3a3b40;
+  --bg-input: #1e1f21;
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+
+  /* Text */
+  --text-primary: #e2e8f0;
+  --text-secondary: #a1a7b3;
+  --text-tertiary: #6b7280;
+  --text-inverse: var(--color-gray-950);
+
+  /* Borders */
+  --border-default: #34353a;
+  --border-subtle: #2c2d30;
+  --border-strong: #45464b;
+
+  /* Shadows - darker for dark theme */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-default: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+
+  /* Toggle */
+  --toggle-bg: var(--color-gray-700);
+  --toggle-knob: var(--color-gray-500);
+
+  /* Graph */
+  --graph-bg: var(--color-gray-950);
+
+  /* Drawer */
+  --drawer-bg: var(--bg-secondary);
+  --drawer-header-bg: var(--bg-primary);
+
+  /* Status backgrounds */
+  --status-success-bg: #064e3b;
+  --status-warning-bg: #78350f;
+  --status-error-bg: #7f1d1d;
+  --status-info-bg: #155e75;
+
+  color-scheme: dark;
+}

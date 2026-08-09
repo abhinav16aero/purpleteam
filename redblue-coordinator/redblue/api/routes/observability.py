@@ -24,6 +24,30 @@ async def posture(request: Request, tenant_id: str | None = None) -> dict:
     return build_posture(scorecards)
 
 
+@router.get("/api/engagements/{engagement_id}/graph")
+async def engagement_graph(engagement_id: str, request: Request) -> dict:
+    """The engagement's attack graph from Decepticon's Neo4j KG → `{nodes, edges}` for the console's
+    force-graph. Findings are colored detected/missed from the stored scorecard. Read failures (KG
+    unconfigured/unreachable) degrade to an empty graph — never 500."""
+    from ...config.settings import get_settings
+    from ...connectors import RedKGReader
+    from ...scoring import attack_graph
+
+    s = get_settings()
+    rows: list[dict] = []
+    if s.decepticon_neo4j_password:
+        reader = RedKGReader(s.decepticon_neo4j_uri, s.decepticon_neo4j_user,
+                             s.decepticon_neo4j_password, s.decepticon_neo4j_database)
+        try:
+            rows = reader.attack_events(engagement_id)
+        except Exception:  # noqa: BLE001 — KG hiccup → empty graph, not a 500
+            rows = []
+        finally:
+            reader.close()
+    sc = request.app.state.store.get_scorecard(engagement_id) or {}
+    return attack_graph(rows, detected_techniques=sc.get("detected_techniques", []))
+
+
 @router.get("/api/engagements/{engagement_id}/events")
 async def engagement_events(engagement_id: str, request: Request) -> StreamingResponse:
     """SSE timeline of the engagement's evidence records (plan 09 §1.6). The console consumes this

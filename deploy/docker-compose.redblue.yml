@@ -20,6 +20,13 @@ services:
     container_name: redblue-ollama
     ports:
       - "11434:11434"
+    environment:
+      # CPU-only tuning (no GPU): keep the model resident between agent turns (no reload cost each
+      # call) and put ALL cores on ONE request — the agentic loop is serial, so parallelism just
+      # splits the CPU and slows each turn. These are the biggest CPU wins short of a GPU.
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_LOADED_MODELS=1
     volumes:
       - ollama_models:/root/.ollama
     networks: [redblue-shared]

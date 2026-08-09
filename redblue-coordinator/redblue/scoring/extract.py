@@ -135,6 +135,45 @@ def kg_attacks(rows: Iterable[dict], *, default_ts: float) -> list[dict]:
     return out
 
 
+def attack_graph(rows: Iterable[dict], *, detected_techniques: Iterable[str] = ()) -> dict:
+    """Decepticon KG Finding rows → a force-graph `{nodes, edges}` for the console.
+
+    Nodes: `host` (what red reached), `finding` (colored by whether any of its techniques was
+    detected), `technique` (MITRE T-id). Edges: host→finding (REACHES), finding→technique (USES).
+    Same schema-defensive extraction as `kg_attacks`; `detected_techniques` (from the scorecard)
+    drives the detected/missed coloring so the graph reads as a purple-team picture.
+    """
+    det = {t for t in detected_techniques if isinstance(t, str)}
+    nodes: dict[str, dict] = {}
+    edges: list[dict] = []
+
+    def add(node_id: str, kind: str, **extra: object) -> None:
+        if node_id not in nodes:
+            nodes[node_id] = {"id": node_id, "kind": kind, **extra}
+
+    for row in rows:
+        props = row.get("finding") if isinstance(row, dict) else None
+        if not isinstance(props, dict):
+            continue
+        techs = _techniques_from_props(props)
+        fid = _first_str(props, _ID_KEYS) or f"finding-{len(nodes)}"
+        label = props.get("label") or props.get("name") or fid
+        f_detected = any(t in det for t in techs)
+        add(fid, "finding", label=str(label)[:90], tool=props.get("tool"),
+            severity=props.get("severity"), techniques=techs, detected=f_detected)
+        hosts = [h for h in (row.get("hosts") or []) if isinstance(h, str) and h]
+        if not hosts:
+            tgt = _first_str(props, _TARGET_KEYS)
+            hosts = [tgt] if tgt else []
+        for h in hosts:
+            add(h, "host", label=h)
+            edges.append({"source": h, "target": fid, "rel": "REACHES"})
+        for t in techs:
+            add(f"tech:{t}", "technique", label=t, detected=(t in det))
+            edges.append({"source": fid, "target": f"tech:{t}", "rel": "USES"})
+    return {"nodes": list(nodes.values()), "edges": edges}
+
+
 def findings_to_detections(findings: Iterable[dict], *, exclude_data_sources: Iterable[str] = ()) -> list[dict]:
     """Vigil findings → [{technique, entity, ts, finding_id}].
 

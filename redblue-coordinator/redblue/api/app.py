@@ -12,7 +12,7 @@ from ..continuous import ContinuousController
 from ..governance import KillSwitch
 from ..loop import Deps, build_graph, make_checkpointer
 from ..store import CoordinatorStore
-from .routes import drift, engagements, eval, health, kill, observability
+from .routes import dashboard, drift, engagements, eval, health, kill, observability
 
 
 def create_app(
@@ -45,4 +45,5 @@ def create_app(
     app.include_router(drift.router)
     app.include_router(eval.router)
     app.include_router(observability.router)
+    app.include_router(dashboard.router)
     return app

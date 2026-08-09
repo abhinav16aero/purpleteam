@@ -73,3 +73,21 @@ def test_kg_attack_source_uses_window_start_as_default_ts():
 def test_kg_attack_source_degrades_to_empty_on_read_failure():
     # a KG hiccup must not abort the engagement — the scorecard honestly shows 0 attacked
     assert _KGAttackSource(_FakeKG([], boom=True)).attacks("eng-x", {"t_start": 1.0}) == []
+
+
+def test_attack_graph_nodes_edges_and_detection_coloring():
+    from redblue.scoring import attack_graph
+    rows = [
+        {"finding": {"key": "F-nmap", "mitre_techniques": ["T1046"], "target": "10.20.0.9",
+                     "tool": "nmap", "label": "nmap scan"}, "hosts": ["10.20.0.9"]},
+        {"finding": {"key": "F-brute", "mitre_techniques": ["T1110"], "target": "10.20.0.9",
+                     "tool": "hydra"}, "hosts": ["10.20.0.9"]},
+    ]
+    g = attack_graph(rows, detected_techniques=["T1046"])
+    kind = {n["id"]: n["kind"] for n in g["nodes"]}
+    assert kind["10.20.0.9"] == "host"
+    assert kind["F-nmap"] == "finding" and kind["tech:T1046"] == "technique"
+    fnode = {n["id"]: n for n in g["nodes"] if n["kind"] == "finding"}
+    assert fnode["F-nmap"]["detected"] is True and fnode["F-brute"]["detected"] is False
+    assert {"source": "10.20.0.9", "target": "F-nmap", "rel": "REACHES"} in g["edges"]
+    assert {"source": "F-nmap", "target": "tech:T1046", "rel": "USES"} in g["edges"]

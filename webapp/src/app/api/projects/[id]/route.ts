@@ -1,0 +1,349 @@
+import { NextRequest, NextResponse } from 'next/server'
+import prisma from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
+import { unlink } from 'fs/promises'
+import { existsSync } from 'fs'
+import path from 'path'
+import { getGraphSession } from '@/app/api/graph/neo4j'
+import { orchestratorFetch } from '@/lib/orchestrator'
+import { isInternalRequest, isScannerRequest } from '@/lib/session'
+import { requireEffectiveUser, requireProjectAccess } from '@/lib/access'
+
+// Path to output directories (fallback for local deletion)
+const RECON_OUTPUT_PATH = process.env.RECON_OUTPUT_PATH || '/home/samuele/Progetti didattici/Swaraj Chakravyuh/recon/output'
+const GVM_OUTPUT_PATH = process.env.GVM_OUTPUT_PATH || '/home/samuele/Progetti didattici/Swaraj Chakravyuh/gvm_scan/output'
+const GITHUB_HUNT_OUTPUT_PATH = process.env.GITHUB_HUNT_OUTPUT_PATH || '/home/samuele/Progetti didattici/Swaraj Chakravyuh/github_secret_hunt/output'
+
+// Recon orchestrator URL for file deletion
+const RECON_ORCHESTRATOR_URL = process.env.RECON_ORCHESTRATOR_URL || 'http://localhost:8010'
+
+interface RouteParams {
+  params: Promise<{ id: string }>
+}
+
+// GET /api/projects/[id] - Get project with all params
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { id } = await params
+
+    // Ownership: the agent/orchestrator (INTERNAL_API_KEY) and scanners
+    // (SCANNER_API_KEY, S3/E6) read projects with X-Internal-Key (carve-out);
+    // every browser caller may only read a project owned by their effective user
+    // (admin only while simulating that user). Closes the BOLA where any
+    // logged-in user could read another user's project by id (S15/E15).
+    if (!isInternalRequest(request) && !isScannerRequest(request)) {
+      const eff = await requireEffectiveUser()
+      if (eff instanceof NextResponse) return eff
+      const access = await requireProjectAccess(eff, id)
+      if (access instanceof NextResponse) return access
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    if (!project) {
+      return NextResponse.json(
+        { error: 'Project not found' },
+        { status: 404 }
+      )
+    }
+
+    // Exclude binary document data from regular responses (use /roe/download instead)
+    const { roeDocumentData: _binary, ...projectWithoutBinary } = project
+
+    // If ?includeSkillContent=true, fetch enabled user skill contents for agent consumption
+    // Skills default to ON when not present in config.user (matching frontend behaviour).
+    const includeSkillContent = request.nextUrl.searchParams.get('includeSkillContent') === 'true'
+    if (includeSkillContent && project.userId) {
+      const config = (project.attackSkillConfig as Prisma.JsonObject) || {}
+      const userToggles = (config.user as Prisma.JsonObject) || {}
+
+      // IDs explicitly disabled (set to false)
+      const disabledIds = Object.entries(userToggles)
+        .filter(([, v]) => v === false)
+        .map(([id]) => id)
+
+      // Fetch all user skills EXCEPT explicitly disabled ones
+      const skills = await prisma.userAttackSkill.findMany({
+        where: {
+          userId: project.userId,
+          ...(disabledIds.length > 0 ? { id: { notIn: disabledIds } } : {}),
+        },
+        select: { id: true, name: true, description: true, content: true },
+      })
+
+      // User-managed MCP servers (UI-driven via /settings/mcp). Read raw
+      // from UserSettings.mcpServers; the agent validates and merges them
+      // with system MCP servers via mcp_registry.parse_user_servers().
+      const userSettings = await prisma.userSettings.findUnique({
+        where: { userId: project.userId },
+        select: { mcpServers: true },
+      })
+      const userMcpServers = (userSettings?.mcpServers as Prisma.JsonValue) ?? []
+
+      return NextResponse.json({
+        ...projectWithoutBinary,
+        userAttackSkills: skills,
+        userMcpServers,
+      })
+    }
+
+    return NextResponse.json(projectWithoutBinary)
+  } catch (error) {
+    console.error('Failed to fetch project:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch project' },
+      { status: 500 }
+    )
+  }
+}
+
+// PUT /api/projects/[id] - Update project params
+export async function PUT(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { id } = await params
+
+    // Only the project's effective owner may mutate it (admin while simulating).
+    const eff = await requireEffectiveUser()
+    if (eff instanceof NextResponse) return eff
+    const access = await requireProjectAccess(eff, id)
+    if (access instanceof NextResponse) return access
+
+    const body = await request.json()
+
+    // Remove fields that shouldn't be updated directly
+    const { userId, createdAt, updatedAt, user, ...updateData } = body
+
+    // Sanitize string inputs that are used as hostnames/IPs (trailing spaces break DNS)
+    if (typeof updateData.targetDomain === 'string') {
+      updateData.targetDomain = updateData.targetDomain.trim()
+    }
+    if (Array.isArray(updateData.subdomainList)) {
+      updateData.subdomainList = updateData.subdomainList.map((s: string) => s.trim()).filter(Boolean)
+    }
+    if (Array.isArray(updateData.targetIps)) {
+      updateData.targetIps = updateData.targetIps.map((s: string) => s.trim()).filter(Boolean)
+    }
+
+    // Supply-chain input: supplyChainRepoUrl becomes a `git clone` argument in
+    // the scan container, so it is validated server-side. The Other Scans UI
+    // validates too, but a direct PUT bypasses it.
+    {
+      const { validateSupplyChainInput } = await import('@/lib/validation/supplyChainInput')
+      const err = validateSupplyChainInput(updateData)
+      if (err) {
+        return NextResponse.json({ error: err }, { status: 400 })
+      }
+    }
+
+    // Fireteam settings: server-side Zod validation so a direct API call
+    // with out-of-range values (bypassing the UI form) still gets rejected.
+    // Only validate when at least one fireteam field is being touched.
+    const FIRETEAM_FIELDS = ['fireteamEnabled', 'fireteamMaxConcurrent',
+      'fireteamMaxMembers', 'fireteamMemberMaxIterations',
+      'fireteamTimeoutSec', 'fireteamAllowedPhases',
+      'fireteamPropensity'] as const
+    const touchesFireteam = FIRETEAM_FIELDS.some(k => k in updateData)
+    let fireteamOldValues: Record<string, unknown> | null = null
+    if (touchesFireteam) {
+      const { validateFireteamSettings } = await import('@/lib/validation/fireteamSettings')
+      const err = validateFireteamSettings(updateData)
+      if (err) {
+        return NextResponse.json({ error: err }, { status: 400 })
+      }
+      // Capture old values for audit log BEFORE the update.
+      const existing = await prisma.project.findUnique({
+        where: { id },
+        select: Object.fromEntries(FIRETEAM_FIELDS.map(k => [k, true])) as any,
+      })
+      fireteamOldValues = existing as Record<string, unknown> | null
+    }
+
+    const project = await prisma.project.update({
+      where: { id },
+      data: updateData
+    })
+
+    // Audit trail for fireteam settings changes. Best-effort: audit failure
+    // must not roll back the update.
+    if (touchesFireteam && fireteamOldValues) {
+      try {
+        const auditRows = []
+        for (const field of FIRETEAM_FIELDS) {
+          if (!(field in updateData)) continue
+          const oldV = fireteamOldValues[field]
+          const newV = (updateData as Record<string, unknown>)[field]
+          if (JSON.stringify(oldV) === JSON.stringify(newV)) continue
+          auditRows.push({
+            projectId: id,
+            userId: (project as { userId?: string | null }).userId ?? null,
+            field,
+            oldValue: oldV === undefined ? null : (oldV as any),
+            newValue: newV === undefined ? null : (newV as any),
+            source: 'api',
+          })
+        }
+        if (auditRows.length > 0) {
+          await prisma.fireteamSettingsAudit.createMany({ data: auditRows })
+        }
+      } catch (e) {
+        console.warn('Fireteam settings audit write failed:', e)
+      }
+    }
+
+    // Ensure Domain node exists in Neo4j (create if missing, update if domain changed)
+    if (!project.ipMode && project.targetDomain) {
+      try {
+        const session = getGraphSession()
+        try {
+          await session.run(
+            `MERGE (d:Domain {name: $name, user_id: $userId, project_id: $projectId})
+             ON CREATE SET d.source = 'project_creation', d.updated_at = datetime()`,
+            { name: project.targetDomain, userId: project.userId, projectId: project.id }
+          )
+        } finally {
+          await session.close()
+        }
+      } catch (e) {
+        console.warn('Failed to ensure Domain node in Neo4j on project update:', e)
+      }
+    }
+
+    // Exclude binary document data from response (same as GET)
+    const { roeDocumentData: _binary, ...projectWithoutBinary } = project
+    return NextResponse.json(projectWithoutBinary)
+  } catch (error: unknown) {
+    console.error('Failed to update project:', error)
+
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') {
+      return NextResponse.json(
+        { error: 'Project not found' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json(
+      { error: 'Failed to update project' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE /api/projects/[id] - Delete project and all associated data
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { id } = await params
+
+    // Only the project's effective owner may delete it (admin while simulating).
+    const eff = await requireEffectiveUser()
+    if (eff instanceof NextResponse) return eff
+    const access = await requireProjectAccess(eff, id)
+    if (access instanceof NextResponse) return access
+
+    // Collect captured-traffic body refs BEFORE the cascade removes the rows, so
+    // we can ref-counted-GC the now-unreferenced blobs afterward (§6.6). Prisma
+    // cascade removes the rows but never touches the filesystem.
+    let capturedBodyRefs: (string | null)[] = []
+    try {
+      const doomed = await prisma.capturedHttpTransaction.findMany({
+        where: { projectId: id }, select: { reqBodyRef: true, respBodyRef: true },
+      })
+      capturedBodyRefs = doomed.flatMap(r => [r.reqBodyRef, r.respBodyRef])
+    } catch (e) {
+      console.warn('Could not enumerate captured body refs before project delete:', e)
+    }
+
+    // 1. Delete project from PostgreSQL (cascades captured_http_transactions rows)
+    await prisma.project.delete({
+      where: { id }
+    })
+
+    // 1b. GC captured body blobs this project exclusively owned (ref-counted).
+    if (capturedBodyRefs.length > 0) {
+      try {
+        const { gcOrphanBodies } = await import('@/lib/captureBodies')
+        const gc = await gcOrphanBodies(capturedBodyRefs)
+        if (gc.deleted > 0) console.log(`[project-delete] GC'd ${gc.deleted} captured body blobs for project ${id}`)
+      } catch (e) {
+        console.warn('Captured body-blob GC failed on project delete:', e)
+      }
+    }
+
+    // 2. Delete all output JSON files via orchestrator (it has write permissions)
+    //    This covers: recon, GVM, and GitHub Secret Hunt JSON files
+    try {
+      const orchestratorResponse = await orchestratorFetch(`${RECON_ORCHESTRATOR_URL}/project/${id}/files`, {
+        method: 'DELETE',
+      })
+      if (orchestratorResponse.ok) {
+        const result = await orchestratorResponse.json()
+        console.log(`Orchestrator deleted files:`, result.deleted)
+      } else {
+        console.warn(`Orchestrator failed to delete files: ${orchestratorResponse.status}`)
+      }
+    } catch (orchestratorError) {
+      console.warn(`Failed to call orchestrator for file deletion: ${orchestratorError}`)
+
+      // Fallback: try to delete locally (may fail in Docker due to read-only mounts)
+      const filesToDelete = [
+        { path: path.join(RECON_OUTPUT_PATH, `recon_${id}.json`), name: 'recon' },
+        { path: path.join(GVM_OUTPUT_PATH, `gvm_${id}.json`), name: 'GVM' },
+        { path: path.join(GITHUB_HUNT_OUTPUT_PATH, `github_hunt_${id}.json`), name: 'GitHub hunt' },
+      ]
+      for (const file of filesToDelete) {
+        if (existsSync(file.path)) {
+          try {
+            await unlink(file.path)
+            console.log(`Deleted ${file.name} file locally: ${file.path}`)
+          } catch (err) {
+            console.warn(`Failed to delete ${file.name} file locally: ${err}`)
+          }
+        }
+      }
+    }
+
+    // 3. Delete all Neo4j nodes for this project
+    try {
+      const session = getGraphSession()
+      try {
+        // Delete all nodes that belong to this project (DETACH DELETE removes relationships too)
+        await session.run(
+          `MATCH (n {project_id: $projectId}) DETACH DELETE n`,
+          { projectId: id }
+        )
+        console.log(`Deleted Neo4j nodes for project: ${id}`)
+      } finally {
+        await session.close()
+      }
+    } catch (neo4jError) {
+      // Log but don't fail the request if Neo4j cleanup fails
+      console.warn(`Failed to delete Neo4j data: ${neo4jError}`)
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error: unknown) {
+    console.error('Failed to delete project:', error)
+
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') {
+      return NextResponse.json(
+        { error: 'Project not found' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json(
+      { error: 'Failed to delete project' },
+      { status: 500 }
+    )
+  }
+}
