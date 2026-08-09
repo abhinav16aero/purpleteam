@@ -78,11 +78,18 @@ curl -N  "http://localhost:8900/api/engagements/$ENG/events"  # live SSE timelin
 
 ## Tier 2 — Wazuh takes the telemetry and passes it to the blue team (`detected > 0`)
 
-**The blue path is now fixed AND verified end-to-end** (logic-level, no heavy stack needed): a
-realistic Wazuh alert → `custom-vigil` transform → canonical finding → the coordinator's
-`findings_to_detections` → `correlate` scored it **DETECTED, MTTD 12 s**. So the transform + ingest +
-detection + correlation chain is proven; the remaining unknowns are purely operational (does the
-heavy stack come up, and does Suricata actually emit an alert).
+**Fixed AND verified on a real Wazuh manager.** Two independent proofs:
+1. *Logic:* a realistic Wazuh alert → `custom-vigil` → finding → the coordinator's
+   `findings_to_detections` → `correlate` scored it **DETECTED, MTTD 12 s**.
+2. *Live (ran wazuh-manager:4.9.2 locally):* the manager **boots with our config-mount `ossec.conf`**,
+   runs `analysisd` + **`integratord`**, and the **`custom-vigil` integrator actually fires** on
+   alerts and attempts the POST to Vigil — all **without the indexer/dashboard** (they're just the
+   Wazuh UI). So the telemetry→blue-team trigger is confirmed; the only live unknown is whether the
+   *sensor* emits an alert for a given attack.
+
+> **Prototype shape:** the default telemetry stack is now **`wazuh.manager` + sensors only** — the
+> heavy OpenSearch **indexer + dashboard are opt-in behind `PROFILES=full`** (they need the full
+> TLS/opensearch alignment and a lot of RAM, and the detection→Vigil path does not use them).
 
 **✅ Fixed / applied this pass**
 - **Wazuh now actually runs the `custom-vigil` integrator + reads the sensors.** The bare snippet
@@ -98,27 +105,35 @@ heavy stack come up, and does Suricata actually emit an alert).
      prototype signal (no network-IDS rules needed).
 - **Suricata now sees the attack** — moved to `network_mode: "service:dvwa"` (shares DVWA's netns) so
   it sniffs the real unicast flows instead of only broadcast on the bridge; gated behind `profiles: [target]`.
-- **TLS certs** — `make certs` (wazuh-certs-generator); `make telemetry` depends on it.
+- **TLS certs** — `make certs` fixed: node names must be the **dotted** service names (`wazuh.manager`,
+  not `wazuh-manager`, or the generator errors `No IP or DNS specified`). Verified: generator completes.
+- **Manager cert mounts** point at the paths the manager actually reads
+  (`/etc/ssl/{root-ca,filebeat,filebeat-key}.pem`) — verified by the live boot test.
 - **`range-net` subnet** `10.20.0.0/24` (matches Suricata `HOME_NET`); phantom `wazuh-agent` image gone.
 - **DEV_MODE=true** on Vigil (enclave) so the integrator's unauthenticated ingest is accepted.
 
 **⚠ The one remaining runtime variable**
 - **Suricata rules** — `jasonish/suricata` ships none; the service now runs `suricata-update` on start,
-  but that needs egress to fetch ET Open. Run it **once while the host still has internet** (before the
-  egress lockdown), or bake a rules file in. The **DVWA apache-log** detection path needs no external
-  rules, so prefer it for a first `detected > 0`.
+  but that needs egress to fetch ET Open. Run it **once while the host still has internet**, or bake a
+  rules file in. The **DVWA apache-log** path needs no external rules (Wazuh's built-in web rules), so
+  prefer it for a first `detected > 0`.
 
-### Verify it live (on the resourced host)
+### Fresh deploy + verify (on the resourced host)
 ```bash
-sudo sysctl -w vm.max_map_count=262144
-make certs                                       # one-time TLS certs
-make telemetry PROFILES=target                   # Wazuh + Suricata(netns) + DVWA
-# attack DVWA (Tier-1), then watch the telemetry cross the boundary:
+cd deploy
+make net && make ollama && make up                 # Tier-1 loop
+docker compose -p telemetry -f ../telemetry/docker-compose.telemetry.yml --profile target up -d dvwa
+make certs                                          # TLS certs (now succeeds)
+make telemetry PROFILES=target                      # manager + Suricata(netns) + DVWA (NO indexer)
+#   add the Wazuh UI too (heavy, optional):  make telemetry PROFILES=target,full
+# run a Tier-1 engagement against range-dvwa, then watch telemetry cross into blue:
 docker exec wazuh-manager tail -n5 /var/ossec/logs/alerts/alerts.json          # Wazuh raised alerts
-docker logs wazuh-manager 2>&1 | grep -i custom-vigil                          # integrator fired
+docker logs wazuh-manager 2>&1 | grep -i 'custom-vigil'                        # integrator fired (verified locally)
 curl -s http://localhost:6987/api/findings | jq '.[]|select(.data_source!="decepticon")|.finding_id'  # landed in Vigil
 curl -s http://localhost:8900/api/engagements/$ENG/scorecard | jq '.detected_techniques'              # scored
 ```
+If `grep custom-vigil` shows it firing but nothing lands in Vigil, it's the POST target — confirm the
+manager is on `redblue-shared` and `backend:6987` resolves (that was the only failure in the local test).
 
 ---
 

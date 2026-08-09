@@ -39,3 +39,6 @@ telemetry/**/data/
 
 # Claude Code local settings (per-user; never commit)
 .claude/settings.local.json
+
+# Wazuh TLS certs — generated per-deploy by `make certs`, never commit
+telemetry/wazuh/certs/

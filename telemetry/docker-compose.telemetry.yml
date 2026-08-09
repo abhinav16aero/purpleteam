@@ -34,7 +34,11 @@ services:
       # (0-wazuh-init honours $WAZUH_CONFIG_MOUNT). This is what actually activates the custom-vigil
       # integration + the Suricata/DVWA localfiles — a bare snippet mount never merges into ossec.conf.
       - ./wazuh/ossec.conf:/wazuh-config-mount/etc/ossec.conf:ro
-      - ./wazuh/certs:/etc/ssl/wazuh:ro                              # from cert-gen (`make certs`)
+      # Filebeat certs at the paths the manager actually references (verified: manager boots + the
+      # custom-vigil integrator fires with exactly these). From `make certs`.
+      - ./wazuh/certs/root-ca.pem:/etc/ssl/root-ca.pem:ro
+      - ./wazuh/certs/wazuh.manager.pem:/etc/ssl/filebeat.pem:ro
+      - ./wazuh/certs/wazuh.manager-key.pem:/etc/ssl/filebeat-key.pem:ro
       - suricata_logs:/var/log/suricata:ro                          # Suricata eve.json (native decoders)
       - dvwa_logs:/var/log/dvwa-apache:ro                           # DVWA apache access log (web-attack rules)
     networks: [telemetry-net, redblue-shared]
@@ -44,6 +48,9 @@ services:
     image: wazuh/wazuh-indexer:${WAZUH_VERSION:-4.9.2}
     container_name: wazuh-indexer
     hostname: wazuh.indexer
+    profiles: [full]           # OPT-IN: the OpenSearch store + UI. HEAVY (JVM) and needs the full
+                               # TLS/opensearch.yml alignment. The manager alone detects + forwards to
+                               # Vigil (verified), so the prototype does NOT need this. Add PROFILES=full.
     ports:
       - "9200:9200"          # OpenSearch (alerts: wazuh-alerts-*)
     environment:
@@ -59,6 +66,7 @@ services:
   wazuh.dashboard:
     image: wazuh/wazuh-dashboard:${WAZUH_VERSION:-4.9.2}
     container_name: wazuh-dashboard
+    profiles: [full]           # OPT-IN Wazuh UI (see wazuh.indexer). Not needed for telemetry→Vigil.
     ports:
       - "8443:5601"          # remapped from 443 (00 §4)
     environment:
