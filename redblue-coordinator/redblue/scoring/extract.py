@@ -174,6 +174,50 @@ def attack_graph(rows: Iterable[dict], *, detected_techniques: Iterable[str] = (
     return {"nodes": list(nodes.values()), "edges": edges}
 
 
+def kg_graph(rows: Iterable[dict], *, detected_techniques: Iterable[str] = ()) -> dict:
+    """Full engagement-scoped KG rows (`RedKGReader.graph`) → an interactive `{nodes, edges}` graph.
+
+    Each node's `kind` is its first Neo4j label lowercased (host/port/service/finding/technique/…), so
+    the console can color it by type like the recon graph. Technique nodes are flagged detected/missed
+    from the scorecard; a finding is flagged detected if it USES a detected technique. Deduped.
+    """
+    det = {t for t in detected_techniques if isinstance(t, str)}
+    nodes: dict[str, dict] = {}
+    edges: list[dict] = []
+    seen: set[tuple] = set()
+
+    def add(nid: object, labels: object, key: object) -> str | None:
+        if not isinstance(nid, str):
+            return None
+        if nid not in nodes:
+            labs = labels if isinstance(labels, list) else []
+            kind = str(labs[0]).lower() if labs else "node"
+            label = str(key if key is not None else nid)[:48]
+            node = {"id": nid, "kind": kind, "label": label}
+            if kind in ("technique", "mitre"):
+                node["detected"] = any(t in det for t in _TECH_SCAN.findall(label))
+            nodes[nid] = node
+        return nid
+
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        a = add(r.get("nid"), r.get("nl"), r.get("nk"))
+        rt, mid = r.get("rt"), r.get("mid")
+        if a and isinstance(rt, str) and isinstance(mid, str):
+            key = (a, mid, rt)
+            if key not in seen:
+                seen.add(key)
+                edges.append({"source": a, "target": mid, "rel": rt})
+    # a finding inherits "detected" from any technique it points at
+    det_tech = {n["id"] for n in nodes.values() if n["kind"] in ("technique", "mitre") and n.get("detected")}
+    for e in edges:
+        src = nodes.get(e["source"])
+        if src and src["kind"] == "finding" and e["target"] in det_tech:
+            src["detected"] = True
+    return {"nodes": list(nodes.values()), "edges": edges}
+
+
 def findings_to_detections(findings: Iterable[dict], *, exclude_data_sources: Iterable[str] = ()) -> list[dict]:
     """Vigil findings → [{technique, entity, ts, finding_id}].
 

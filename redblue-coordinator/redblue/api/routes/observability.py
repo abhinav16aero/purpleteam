@@ -31,21 +31,26 @@ async def engagement_graph(engagement_id: str, request: Request) -> dict:
     unconfigured/unreachable) degrade to an empty graph — never 500."""
     from ...config.settings import get_settings
     from ...connectors import RedKGReader
-    from ...scoring import attack_graph
+    from ...scoring import attack_graph, kg_graph
 
     s = get_settings()
-    rows: list[dict] = []
+    graph_rows: list[dict] = []
+    surface_rows: list[dict] = []
     if s.decepticon_neo4j_password:
         reader = RedKGReader(s.decepticon_neo4j_uri, s.decepticon_neo4j_user,
                              s.decepticon_neo4j_password, s.decepticon_neo4j_database)
         try:
-            rows = reader.attack_events(engagement_id)
+            graph_rows = reader.graph(engagement_id)          # full engagement-scoped graph
+            if not graph_rows:                                 # fallback: finding→host→technique surface
+                surface_rows = reader.attack_events(engagement_id)
         except Exception:  # noqa: BLE001 — KG hiccup → empty graph, not a 500
-            rows = []
+            graph_rows, surface_rows = [], []
         finally:
             reader.close()
-    sc = request.app.state.store.get_scorecard(engagement_id) or {}
-    return attack_graph(rows, detected_techniques=sc.get("detected_techniques", []))
+    detected = (request.app.state.store.get_scorecard(engagement_id) or {}).get("detected_techniques", [])
+    if graph_rows:
+        return kg_graph(graph_rows, detected_techniques=detected)
+    return attack_graph(surface_rows, detected_techniques=detected)
 
 
 @router.get("/api/engagements/{engagement_id}/events")

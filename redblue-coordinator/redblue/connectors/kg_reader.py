@@ -56,6 +56,19 @@ class RedKGReader:
             engagement,
         )
 
+    # the FULL engagement-scoped graph (every node carrying this engagement + the edges between them)
+    # → the console's interactive recon/attack graph. Scoped by the `engagement` property, so it needs
+    # that on the nodes (Decepticon findings carry it; demo-seed sets it on the whole recon chain).
+    def graph(self, engagement: str) -> list[dict]:
+        return self._read(
+            "MATCH (n) WHERE n.engagement=$engagement "
+            "OPTIONAL MATCH (n)-[r]->(m) WHERE m.engagement=$engagement "
+            "RETURN elementId(n) AS nid, labels(n) AS nl, "
+            "coalesce(n.key,n.label,n.name,elementId(n)) AS nk, "
+            "type(r) AS rt, elementId(m) AS mid",
+            engagement,
+        )
+
     # blue_cell ground truth: DetectionFired -[:DETECTED]-> t, -[:USES_RULE]-> rule
     def detection_coverage(self, engagement: str) -> list[dict]:
         return self._read(

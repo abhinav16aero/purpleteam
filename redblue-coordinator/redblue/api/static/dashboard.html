@@ -1,62 +1,84 @@
-<!-- RedBlue Console — single-file dashboard, served by the coordinator (same origin as /api → no CORS).
-     Vanilla JS + inline SVG (no CDN/deps → works under any CSP, over an SSH tunnel to :8900). -->
+<!-- RedBlue / Swaraj Chakravyuh console — single-file dashboard served by the coordinator (same origin
+     as /api → no CORS). Design tokens mirror the Swaraj Chakravyuh webapp. Vanilla JS + inline SVG. -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>RedBlue Console</title>
+<title>Swaraj Chakravyuh — RedBlue Console</title>
+<link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'><g stroke='%2322c55e' stroke-width='3.4' stroke-linecap='round'><circle cx='32' cy='32' r='26' stroke-dasharray='132 42'/><circle cx='32' cy='32' r='19' stroke-dasharray='98 34'/></g><circle cx='32' cy='32' r='4.2' fill='%2306b6d4'/></svg>" />
 <style>
   :root{
-    --bg:#0b0e14; --panel:#141922; --panel2:#1b2230; --line:#232a36;
-    --tx:#c9d1d9; --muted:#8b949e; --faint:#5b6472;
-    --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --ok:#3fb950; --warn:#d29922; --crit:#f85149;
-    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
-    --sans:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    /* Swaraj Chakravyuh tokens */
+    --bg-primary:#242527; --bg-secondary:#2a2b2e; --bg-tertiary:#303135; --bg-input:#1e1f21; --graph-bg:#0a0a0a;
+    --tx:#e2e8f0; --tx2:#a1a7b3; --tx3:#6b7280;
+    --line:#27272a; --line-subtle:#1f1f23; --line-strong:#3f3f46;
+    --accent:#22c55e; --accent-h:#16a34a; --cyan:#06b6d4; --cyan-h:#0891b2;
+    --ok:#10b981; --ok-t:#34d399; --warn:#f59e0b; --warn-t:#fbbf24; --err:#ef4444; --err-t:#f87171; --info:#06b6d4;
+    --node-host:#0d9488; --node-tech:#f97316;
+    --r-sm:6px; --r-md:10px; --r-full:999px;
+    --sh:0 1px 3px 0 rgba(0,0,0,.4),0 1px 2px -1px rgba(0,0,0,.4);
+    --sh-md:0 4px 6px -1px rgba(0,0,0,.4),0 2px 4px -2px rgba(0,0,0,.4);
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:radial-gradient(1200px 500px at 70% -10%,#12202e 0,var(--bg) 60%);color:var(--tx);font:14px/1.5 var(--sans)}
-  header{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(11,14,20,.85);backdrop-filter:blur(6px);z-index:5}
-  .logo{font-weight:800;letter-spacing:.5px}
-  .logo .r{color:var(--red)} .logo .b{color:var(--blue)}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--faint);display:inline-block}
-  .dot.up{background:var(--ok);box-shadow:0 0 8px var(--ok)} .dot.down{background:var(--crit)}
-  nav{display:flex;gap:4px;margin-left:8px}
-  nav button{background:none;border:0;color:var(--muted);padding:8px 14px;border-radius:8px;cursor:pointer;font:inherit}
-  nav button.on{color:var(--tx);background:var(--panel2)}
+  html{scrollbar-width:thin;scrollbar-color:var(--line-strong) var(--bg-tertiary)}
+  ::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:var(--bg-tertiary)}
+  ::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:var(--r-full)}::-webkit-scrollbar-thumb:hover{background:var(--tx3)}
+  body{margin:0;color:var(--tx);font:14px/1.5 var(--sans);
+    background:radial-gradient(1100px 460px at 78% -12%,rgba(6,182,212,.10),transparent 60%),
+               radial-gradient(900px 420px at 12% -8%,rgba(34,197,94,.08),transparent 55%),var(--bg-primary)}
+  header{display:flex;align-items:center;gap:16px;padding:12px 22px;border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:5;background:rgba(36,37,39,.86);backdrop-filter:blur(8px);box-shadow:var(--sh)}
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand svg{width:30px;height:30px;filter:drop-shadow(0 0 6px rgba(34,197,94,.35))}
+  .brand .nm{font-weight:800;letter-spacing:.3px;font-size:16px;
+    background:linear-gradient(120deg,#22c55e,#06b6d4);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .brand .sub{font-size:10px;color:var(--tx3);letter-spacing:1.5px;text-transform:uppercase}
+  nav{display:flex;gap:2px;margin-left:6px}
+  nav button{background:none;border:0;color:var(--tx2);padding:8px 14px;border-radius:var(--r-sm);cursor:pointer;font:inherit;position:relative}
+  nav button:hover{color:var(--tx);background:var(--bg-tertiary)}
+  nav button.on{color:var(--tx)}
+  nav button.on::after{content:"";position:absolute;left:14px;right:14px;bottom:2px;height:2px;border-radius:2px;background:linear-gradient(90deg,#22c55e,#06b6d4)}
   .grow{flex:1}
-  .muted{color:var(--muted)} .faint{color:var(--faint)} .mono{font-family:var(--mono)}
-  main{padding:20px;max-width:1200px;margin:0 auto}
-  .grid{display:grid;gap:14px}
-  .kpis{grid-template-columns:repeat(4,1fr)}
-  .cols2{grid-template-columns:1fr 1fr}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
-  .panel h3{margin:0 0 12px;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
-  .kpi .v{font-size:30px;font-weight:800;font-family:var(--mono)}
-  .kpi .l{font-size:12px;color:var(--muted)}
+  .muted{color:var(--tx2)} .faint{color:var(--tx3)} .mono{font-family:var(--mono)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--tx3);display:inline-block}
+  .dot.up{background:var(--ok);box-shadow:0 0 8px var(--ok)} .dot.down{background:var(--err)}
+  main{padding:22px;max-width:1200px;margin:0 auto}
+  .grid{display:grid;gap:14px} .kpis{grid-template-columns:repeat(4,1fr)} .cols2{grid-template-columns:1fr 1fr}
+  .panel{background:var(--bg-secondary);border:1px solid var(--line);border-radius:var(--r-md);padding:16px;box-shadow:var(--sh)}
+  .panel h3{margin:0 0 12px;font-size:12px;font-weight:600;color:var(--tx2);text-transform:uppercase;letter-spacing:.8px}
+  .kpi .v{font-size:30px;font-weight:800;font-family:var(--mono);background:linear-gradient(120deg,#e2e8f0,#a1a7b3);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .kpi .l{font-size:12px;color:var(--tx2)}
   table{width:100%;border-collapse:collapse;font-size:13px}
-  th{text-align:left;color:var(--faint);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
-  td{padding:8px 8px;border-bottom:1px solid #1a212c;font-family:var(--mono)}
-  tr.click{cursor:pointer} tr.click:hover td{background:var(--panel2)}
-  tr.sel td{background:#182234}
-  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-family:var(--mono);border:1px solid var(--line)}
-  .pill.ok{color:var(--ok);border-color:#1f3d29} .pill.bad{color:var(--crit);border-color:#4a1f1f}
-  .pill.run{color:var(--warn);border-color:#4a3d1f} .pill.blue{color:var(--blue);border-color:#1f3350}
-  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--tx);padding:8px 14px;border-radius:8px;cursor:pointer;font:inherit}
-  .btn:hover{border-color:var(--blue)}
-  .btn.primary{background:linear-gradient(180deg,#1f6feb,#175bce);border-color:#175bce;color:#fff}
-  .btn.kill{background:#3a1417;border-color:#5a1f24;color:var(--red);font-weight:700}
-  input,select{background:var(--bg);border:1px solid var(--line);color:var(--tx);padding:7px 10px;border-radius:8px;font:inherit}
+  th{text-align:left;color:var(--tx3);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  td{padding:8px;border-bottom:1px solid var(--line-subtle);font-family:var(--mono)}
+  tr.click{cursor:pointer} tr.click:hover td{background:var(--bg-tertiary)} tr.sel td{background:#22312e}
+  .pill{display:inline-block;padding:2px 9px;border-radius:var(--r-full);font-size:11px;font-family:var(--mono);border:1px solid var(--line)}
+  .pill.ok{color:var(--ok-t);border-color:#14532d;background:#0e2a1c} .pill.bad{color:var(--err-t);border-color:#7f1d1d;background:#2a1315}
+  .pill.run{color:var(--warn-t);border-color:#78350f;background:#2a1e0c} .pill.blue{color:#67e8f9;border-color:#155e75;background:#0c2530}
+  .btn{background:var(--bg-tertiary);border:1px solid var(--line);color:var(--tx);padding:8px 14px;border-radius:var(--r-sm);cursor:pointer;font:inherit}
+  .btn:hover{border-color:var(--cyan)}
+  .btn.primary{background:linear-gradient(180deg,#22c55e,#16a34a);border-color:#15803d;color:#04140b;font-weight:700}
+  .btn.kill{background:#2a1315;border-color:#7f1d1d;color:var(--err-t);font-weight:700}
+  input,select{background:var(--bg-input);border:1px solid var(--line);color:var(--tx);padding:7px 10px;border-radius:var(--r-sm);font:inherit}
+  input:focus,select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 2px rgba(6,182,212,.25)}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;max-height:280px;overflow:auto;font-size:12px;margin:0}
-  .bar{height:10px;border-radius:6px;background:#1a212c;overflow:hidden;display:flex}
-  .bar i{display:block;height:100%}
-  .tech{display:inline-block;padding:1px 7px;margin:2px;border-radius:6px;font-family:var(--mono);font-size:12px;border:1px solid var(--line)}
-  .tech.d{color:var(--ok);border-color:#1f3d29;background:#0f1c14}
-  .tech.m{color:var(--crit);border-color:#4a1f1f;background:#1c1113}
-  .empty{color:var(--faint);text-align:center;padding:30px}
-  a{color:var(--blue)}
+  pre{background:var(--graph-bg);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px;max-height:280px;overflow:auto;font-size:12px;margin:0;font-family:var(--mono)}
+  .bar{height:10px;border-radius:6px;background:var(--bg-input);overflow:hidden;display:flex}.bar i{display:block;height:100%}
+  .tech{display:inline-block;padding:1px 8px;margin:2px;border-radius:var(--r-sm);font-family:var(--mono);font-size:12px;border:1px solid var(--line)}
+  .tech.d{color:var(--ok-t);border-color:#14532d;background:#0e2a1c} .tech.m{color:var(--err-t);border-color:#7f1d1d;background:#2a1315}
+  .empty{color:var(--tx3);text-align:center;padding:30px} a{color:var(--cyan)}
 </style>
 
 <header>
-  <span class="logo"><span class="r">Red</span><span class="b">Blue</span> Console</span>
+  <div class="brand">
+    <svg viewBox="0 0 64 64" fill="none" aria-label="Swaraj Chakravyuh"><defs><linearGradient id="g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#22c55e"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs>
+      <g stroke="url(#g)" stroke-width="3.2" stroke-linecap="round">
+        <circle cx="32" cy="32" r="26" stroke-dasharray="132 42" transform="rotate(-20 32 32)"/>
+        <circle cx="32" cy="32" r="19.5" stroke-dasharray="98 34" transform="rotate(55 32 32)"/>
+        <circle cx="32" cy="32" r="13" stroke-dasharray="63 26" transform="rotate(150 32 32)"/></g>
+      <circle cx="32" cy="32" r="4.2" fill="url(#g)"/></svg>
+    <div><div class="nm">Swaraj Chakravyuh</div><div class="sub">RedBlue Console</div></div>
+  </div>
   <nav id="nav"></nav>
   <span class="grow"></span>
   <span class="muted mono" id="clock"></span>
@@ -73,41 +95,36 @@ const fmtSecs = s => s==null?'—':(s<60?Math.round(s)+'s':(s/60).toFixed(1)+'m'
 const pct = f => f==null?'—':Math.round(f*100)+'%';
 const TABS = ['Posture','Engagements','Graph','Evidence'];
 let tab = location.hash.slice(1)||'Posture'; if(!TABS.includes(tab)) tab='Posture';
-let selected = null, es = null;
+let selected = null, es = null, fg = null;
 
-function donut(frac){ // detected fraction 0..1 → svg donut
+function donut(frac){
   const r=52,c=2*Math.PI*r,det=(frac||0)*c,mis=c-det;
   return `<svg viewBox="0 0 140 140" width="150" height="150" style="transform:rotate(-90deg)">
-    <circle cx=70 cy=70 r=${r} fill=none stroke=#1a212c stroke-width=16/>
-    <circle cx=70 cy=70 r=${r} fill=none stroke=var(--crit) stroke-width=16 stroke-dasharray="${mis} ${c}" stroke-dashoffset="${-det}"/>
-    <circle cx=70 cy=70 r=${r} fill=none stroke=var(--ok) stroke-width=16 stroke-dasharray="${det} ${c}" stroke-linecap=round/>
-    <text x=70 y=70 fill=var(--tx) font-size=22 font-family=var(--mono) text-anchor=middle dominant-baseline=central transform="rotate(90 70 70)">${pct(frac)}</text>
-  </svg>`;
+    <circle cx=70 cy=70 r=${r} fill=none stroke=var(--bg-input) stroke-width=16/>
+    <circle cx=70 cy=70 r=${r} fill=none stroke=var(--err) stroke-width=16 stroke-dasharray="${mis} ${c}" stroke-dashoffset="${-det}"/>
+    <circle cx=70 cy=70 r=${r} fill=none stroke=var(--accent) stroke-width=16 stroke-dasharray="${det} ${c}" stroke-linecap=round/>
+    <text x=70 y=70 fill=var(--tx) font-size=22 font-family=var(--mono) text-anchor=middle dominant-baseline=central transform="rotate(90 70 70)">${pct(frac)}</text></svg>`;
 }
-function statusPill(s){const m={completed:'ok',running:'run',failed:'bad'};return `<span class="pill ${m[s]||'blue'}">${s||'—'}</span>`;}
+function statusPill(s){const m={completed:'ok',running:'run',failed:'bad',simulated:'blue'};return `<span class="pill ${m[s]||'blue'}">${s||'—'}</span>`;}
 
 async function renderPosture(v){
   let p; try{ p=await j('/api/posture'); }catch(e){ v.innerHTML='<div class="empty">Coordinator unreachable.</div>'; return; }
-  const {attacked,detected}=p.totals||{attacked:0,detected:0};
-  const cov=p.attack_coverage||{attacked:0,detected:0};
+  const {attacked,detected}=p.totals||{attacked:0,detected:0}; const cov=p.attack_coverage||{attacked:0,detected:0};
   v.innerHTML='';
   const k=el('div','grid kpis'); k.innerHTML=[
     ['Detection rate',pct(p.detection_rate)],['Attacked / Detected',attacked+' / '+detected],
     ['MTTD (mean)',fmtSecs((p.mttd||{}).mean)],['Coverage gaps',p.gap_count??0]
   ].map(([l,val])=>`<div class="panel kpi"><div class="l">${l}</div><div class="v">${val}</div></div>`).join('');
   v.appendChild(k);
-  const two=el('div','grid cols2'); two.style.marginTop='14px';
-  const cmax=Math.max(1,cov.attacked);
+  const two=el('div','grid cols2'); two.style.marginTop='14px'; const cmax=Math.max(1,cov.attacked);
   two.innerHTML=`
-    <div class="panel"><h3>Attacked vs Detected</h3><div style="display:flex;gap:18px;align-items:center">
-      ${donut(p.detection_rate)}
+    <div class="panel"><h3>Attacked vs Detected</h3><div style="display:flex;gap:18px;align-items:center">${donut(p.detection_rate)}
       <div><div><span class="tech d">■</span> detected ${detected}</div><div><span class="tech m">■</span> missed ${Math.max(0,attacked-detected)}</div><div class="muted" style="margin-top:6px">${(p.detected_techniques||[]).length} of ${(p.attacked_techniques||[]).length} techniques</div></div></div></div>
     <div class="panel"><h3>ATT&CK coverage</h3>
-      <div class="muted" style="font-size:12px">attacked ${cov.attacked}</div><div class="bar" style="margin:4px 0 12px"><i style="width:100%;background:var(--red)"></i></div>
-      <div class="muted" style="font-size:12px">detected ${cov.detected}</div><div class="bar"><i style="width:${cov.detected/cmax*100}%;background:var(--ok)"></i></div></div>`;
+      <div class="muted" style="font-size:12px">attacked ${cov.attacked}</div><div class="bar" style="margin:4px 0 12px"><i style="width:100%;background:var(--err)"></i></div>
+      <div class="muted" style="font-size:12px">detected ${cov.detected}</div><div class="bar"><i style="width:${cov.detected/cmax*100}%;background:var(--accent)"></i></div></div>`;
   v.appendChild(two);
-  const gp=el('div','panel'); gp.style.marginTop='14px';
-  const gaps=p.top_gaps||[];
+  const gp=el('div','panel'); gp.style.marginTop='14px'; const gaps=p.top_gaps||[];
   gp.innerHTML='<h3>False-negative watchlist (attacked, never detected)</h3>'+(gaps.length?
     '<table><thead><tr><th>Technique</th><th>Target</th></tr></thead><tbody>'+gaps.map(g=>`<tr><td>${g.technique_id}</td><td>${g.entity??'—'}</td></tr>`).join('')+'</tbody></table>'
     :'<div class="empty">No gaps — every attacked technique was detected. ✓</div>');
@@ -117,31 +134,22 @@ async function renderPosture(v){
 async function renderEngagements(v){
   v.innerHTML='';
   const ctl=el('div','panel'); ctl.innerHTML=`<h3>Launch</h3>
-    <div class="row">
-      <input id="e_ten" value="demo" size=8 placeholder="tenant">
-      <input id="e_tgt" value="range-dvwa" size=14 placeholder="target (in_scope)">
+    <div class="row"><input id="e_ten" value="demo" size=8 placeholder="tenant"><input id="e_tgt" value="range-dvwa" size=14 placeholder="target">
       <label class="muted" style="cursor:pointer"><input type="checkbox" id="e_sim" checked> simulate</label>
-      <button class="btn primary" id="e_go">Launch engagement</button>
-      <span class="grow"></span>
-      <button class="btn kill" id="e_kill">■ KILL SWITCH</button>
-    </div><div class="muted mono" id="e_msg" style="margin-top:8px"></div>`;
+      <button class="btn primary" id="e_go">Launch engagement</button><span class="grow"></span>
+      <button class="btn kill" id="e_kill">■ KILL SWITCH</button></div>
+    <div class="muted mono" id="e_msg" style="margin-top:8px"></div>`;
   v.appendChild(ctl);
-  const list=el('div','panel'); list.style.marginTop='14px'; list.innerHTML='<h3>Engagements</h3><div id="e_list" class="muted">loading…</div>';
-  v.appendChild(list);
-  const detail=el('div','', ''); detail.id='e_detail'; detail.style.marginTop='14px'; v.appendChild(detail);
-
+  const list=el('div','panel'); list.style.marginTop='14px'; list.innerHTML='<h3>Engagements</h3><div id="e_list" class="muted">loading…</div>'; v.appendChild(list);
+  const detail=el('div'); detail.id='e_detail'; detail.style.marginTop='14px'; v.appendChild(detail);
   $('#e_go').onclick=async()=>{
-    const body={tenant_id:$('#e_ten').value||'demo',simulate:$('#e_sim').checked,
-      scope:{in_scope:[$('#e_tgt').value||'range-dvwa'],sandbox_url:'http://sandbox:9999'}};
+    const body={tenant_id:$('#e_ten').value||'demo',simulate:$('#e_sim').checked,scope:{in_scope:[$('#e_tgt').value||'range-dvwa'],sandbox_url:'http://sandbox:9999'}};
     $('#e_msg').textContent='launching…';
     try{const r=await j('/api/engagements',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
-      $('#e_msg').textContent='→ '+r.engagement_id+'  status='+r.status+'  rate='+pct(r.detection_rate);
-      await loadList(); openDetail(r.engagement_id);
-    }catch(e){$('#e_msg').textContent='launch failed: '+e.message+' (rebuild coordinator for simulate?)';}
-  };
+      $('#e_msg').textContent='→ '+r.engagement_id+'  status='+r.status+'  rate='+pct(r.detection_rate); await loadList(); openDetail(r.engagement_id);
+    }catch(e){$('#e_msg').textContent='launch failed: '+e.message+' (rebuild coordinator for simulate?)';}};
   $('#e_kill').onclick=async()=>{ if(!confirm('KILL SWITCH — halt ALL engagements?'))return;
     try{await j('/api/kill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({by:'console',reason:'manual'})});$('#e_msg').textContent='kill switch engaged.';}catch(e){$('#e_msg').textContent='kill failed: '+e.message;}};
-
   async function loadList(){
     let rows; try{rows=await j('/api/engagements');}catch(e){$('#e_list').innerHTML='<div class="empty">Coordinator unreachable.</div>';return;}
     rows=Array.isArray(rows)?rows:(rows.engagements||rows.data||[]);
@@ -150,81 +158,100 @@ async function renderEngagements(v){
       rows.map(r=>`<tr class="click ${r.engagement_id===selected?'sel':''}" data-id="${r.engagement_id}"><td>${r.engagement_id}</td><td>${r.tenant_id??'—'}</td><td>${statusPill(r.status)}</td><td>${pct(r.detection_rate)}</td></tr>`).join('')+'</tbody></table>';
     $('#e_list').querySelectorAll('tr.click').forEach(tr=>tr.onclick=()=>openDetail(tr.dataset.id));
   }
-  window._loadList=loadList; await loadList();
-  if(selected) openDetail(selected);
+  window._loadList=loadList; await loadList(); if(selected) openDetail(selected);
 }
 
 async function openDetail(id){
-  selected=id;
-  document.querySelectorAll('#e_list tr.click').forEach(t=>t.classList.toggle('sel',t.dataset.id===id));
+  selected=id; document.querySelectorAll('#e_list tr.click').forEach(t=>t.classList.toggle('sel',t.dataset.id===id));
   const d=$('#e_detail'); if(!d)return; d.innerHTML='<div class="panel muted">loading scorecard…</div>';
   let sc; try{sc=await j('/api/engagements/'+id+'/scorecard');}catch(e){d.innerHTML='<div class="panel empty">No scorecard for '+id+'.</div>';return;}
   const techs=(sc.attacked_techniques||[]).map(t=>{const hit=(sc.detected_techniques||[]).includes(t);return `<span class="tech ${hit?'d':'m'}">${hit?'✔':'✘'} ${t}</span>`;}).join(' ');
   const pf=sc.per_finding||[];
-  d.innerHTML=`<div class="panel"><div class="row"><h3 style="margin:0">Scorecard — ${id}</h3><span class="grow"></span>
-      <span class="muted mono">rate ${pct(sc.detection_rate)} · MTTD ${fmtSecs((sc.mttd||{}).mean)}</span></div>
+  d.innerHTML=`<div class="panel"><div class="row"><h3 style="margin:0">Scorecard — ${id}</h3><span class="grow"></span><span class="muted mono">rate ${pct(sc.detection_rate)} · MTTD ${fmtSecs((sc.mttd||{}).mean)}</span></div>
     <div style="margin:10px 0">${techs||'<span class="faint">no attacks recorded</span>'}</div>
     <table><thead><tr><th>Technique</th><th>Target</th><th>Red @</th><th>Blue @</th><th>Detected</th><th>MTTD</th></tr></thead><tbody>
       ${pf.map(f=>`<tr><td>${f.technique}</td><td>${f.entity??'—'}</td><td>${f.red_action_ts?.toFixed?.(0)??'—'}</td><td>${f.blue_detect_ts?.toFixed?.(0)??'—'}</td><td>${f.detected?'<span class=\"pill ok\">yes</span>':'<span class=\"pill bad\">no</span>'}</td><td>${fmtSecs(f.mttd_seconds)}</td></tr>`).join('')||'<tr><td colspan=6 class="empty">no findings</td></tr>'}
     </tbody></table></div>
-    <div class="panel" style="margin-top:14px"><div class="row"><h3 style="margin:0">Live timeline</h3><span class="grow"></span><button class="btn" id="t_stop">stop stream</button></div>
-      <pre id="t_log">connecting to event stream…</pre></div>`;
-  if(es){es.close();es=null;}
-  const log=$('#t_log'); log.textContent='';
-  try{ es=new EventSource('/api/engagements/'+id+'/events');
-    es.onmessage=e=>{log.textContent+=(e.data||'')+'\n';log.scrollTop=log.scrollHeight;};
-    es.onerror=()=>{log.textContent+='[stream ended]\n';es&&es.close();};
-  }catch(e){log.textContent='SSE unavailable';}
+    <div class="panel" style="margin-top:14px"><div class="row"><h3 style="margin:0">Live timeline</h3><span class="grow"></span><button class="btn" id="t_stop">stop stream</button></div><pre id="t_log">connecting…</pre></div>`;
+  if(es){es.close();es=null;} const log=$('#t_log'); log.textContent='';
+  try{ es=new EventSource('/api/engagements/'+id+'/events'); es.onmessage=e=>{log.textContent+=(e.data||'')+'\n';log.scrollTop=log.scrollHeight;}; es.onerror=()=>{log.textContent+='[stream ended]\n';es&&es.close();}; }catch(e){log.textContent='SSE unavailable';}
   $('#t_stop').onclick=()=>{es&&es.close();es=null;log.textContent+='[stopped]\n';};
+}
+
+// node colors mirror the Swaraj Chakravyuh node palette (semantic tokens)
+const NODE_COL={host:'#0d9488',ip:'#0d9488',port:'#0e7490',service:'#06b6d4',finding:'#ef4444',
+  vulnerability:'#ef4444',cve:'#dc2626',subdomain:'#2563eb',domain:'#1e3a8a',baseurl:'#6366f1',
+  endpoint:'#8b5cf6',parameter:'#a855f7',technology:'#22c55e',certificate:'#d97706',header:'#71717a'};
+const nodeColor=n=>(n.kind==='technique'||n.kind==='mitre')?(n.detected?'#22c55e':'#f97316'):(NODE_COL[n.kind]||'#71717a');
+// interactive Canvas force-graph (drag · zoom · pan · hover-highlight). No CDN.
+function mountForceGraph(canvas,data){
+  const DPR=Math.min(2,window.devicePixelRatio||1); let W=canvas.clientWidth||900,H=470;
+  canvas.width=W*DPR; canvas.height=H*DPR; const ctx=canvas.getContext('2d');
+  const nodes=data.nodes.map((n,i)=>({...n,x:W/2+Math.cos(i*2.4)*160+(Math.random()-.5)*30,y:H/2+Math.sin(i*2.4)*130+(Math.random()-.5)*30,vx:0,vy:0}));
+  const byId={}; nodes.forEach(n=>byId[n.id]=n);
+  const links=data.edges.map(e=>({s:byId[e.source],t:byId[e.target],rel:e.rel})).filter(l=>l.s&&l.t);
+  nodes.forEach(n=>n.deg=0); links.forEach(l=>{l.s.deg++;l.t.deg++;});
+  const rad=n=>4.5+Math.min(7,n.deg)*(n.kind==='host'?1.5:1);
+  let scale=1,tx=0,ty=0,alpha=1,hover=null,drag=null,pan=null,raf=0,stopped=false;
+  function step(){
+    for(let i=0;i<nodes.length;i++)for(let k=i+1;k<nodes.length;k++){const a=nodes[i],b=nodes[k];let dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy||1;const d=Math.sqrt(d2),f=alpha*1900/d2;a.vx+=dx/d*f;a.vy+=dy/d*f;b.vx-=dx/d*f;b.vy-=dy/d*f;}
+    links.forEach(l=>{let dx=l.t.x-l.s.x,dy=l.t.y-l.s.y,d=Math.sqrt(dx*dx+dy*dy)||1,f=alpha*(d-72)*0.05;l.s.vx+=dx/d*f;l.s.vy+=dy/d*f;l.t.vx-=dx/d*f;l.t.vy-=dy/d*f;});
+    nodes.forEach(n=>{if(n===drag)return;n.vx+=(W/2-n.x)*0.0016*alpha;n.vy+=(H/2-n.y)*0.0016*alpha;n.x+=n.vx;n.y+=n.vy;n.vx*=0.86;n.vy*=0.86;});
+    if(alpha>0.03)alpha*=0.992;
+  }
+  function render(){
+    ctx.setTransform(DPR,0,0,DPR,0,0); ctx.clearRect(0,0,W,H); ctx.translate(tx,ty); ctx.scale(scale,scale);
+    let hi=null; if(hover){hi=new Set([hover.id]);links.forEach(l=>{if(l.s===hover)hi.add(l.t.id);if(l.t===hover)hi.add(l.s.id);});}
+    links.forEach(l=>{const on=!hi||(hi.has(l.s.id)&&hi.has(l.t.id));ctx.strokeStyle=on?'#3a3b40':'#242529';ctx.lineWidth=(on?1:0.5)/scale;ctx.beginPath();ctx.moveTo(l.s.x,l.s.y);ctx.lineTo(l.t.x,l.t.y);ctx.stroke();});
+    nodes.forEach(n=>{const on=!hi||hi.has(n.id),r=rad(n);ctx.globalAlpha=on?1:0.2;ctx.fillStyle=nodeColor(n);ctx.beginPath();
+      if(n.kind==='technique'||n.kind==='mitre'){ctx.save();ctx.translate(n.x,n.y);ctx.rotate(0.785);ctx.rect(-r,-r,2*r,2*r);ctx.fill();ctx.restore();}
+      else{ctx.arc(n.x,n.y,r,0,6.283);ctx.fill();}
+      if(n===hover){ctx.globalAlpha=1;ctx.strokeStyle='#e2e8f0';ctx.lineWidth=1.5/scale;ctx.beginPath();ctx.arc(n.x,n.y,r+2.5,0,6.283);ctx.stroke();}
+      if(scale>0.8||(hi&&hi.has(n.id))){ctx.globalAlpha=on?0.85:0.15;ctx.fillStyle='#a1a7b3';ctx.font='10px ui-monospace,monospace';ctx.fillText((n.label||n.id).slice(0,24),n.x+r+3,n.y+3.5);}
+      ctx.globalAlpha=1;});
+  }
+  function loop(){ if(stopped)return; step(); render(); raf=requestAnimationFrame(loop); }
+  const world=(mx,my)=>({x:(mx-tx)/scale,y:(my-ty)/scale});
+  const hit=(mx,my)=>{const w=world(mx,my);let best=null,bd=1e9;nodes.forEach(n=>{const dx=n.x-w.x,dy=n.y-w.y,d=dx*dx+dy*dy,rr=(rad(n)+5)*(rad(n)+5);if(d<rr&&d<bd){bd=d;best=n;}});return best;};
+  canvas.onmousemove=e=>{const R=canvas.getBoundingClientRect(),mx=e.clientX-R.left,my=e.clientY-R.top;
+    if(drag){const w=world(mx,my);drag.x=w.x;drag.y=w.y;drag.vx=drag.vy=0;alpha=Math.max(alpha,0.4);return;}
+    if(pan){tx=pan.tx+mx-pan.mx;ty=pan.ty+my-pan.my;return;}
+    const h=hit(mx,my);if(h!==hover){hover=h;canvas.style.cursor=h?'pointer':'grab';}};
+  canvas.onmousedown=e=>{const R=canvas.getBoundingClientRect(),mx=e.clientX-R.left,my=e.clientY-R.top,h=hit(mx,my);if(h)drag=h;else{pan={mx,my,tx,ty};canvas.style.cursor='grabbing';}};
+  const up=()=>{drag=null;pan=null;canvas.style.cursor='grab';}; window.addEventListener('mouseup',up);
+  canvas.onwheel=e=>{e.preventDefault();const R=canvas.getBoundingClientRect(),mx=e.clientX-R.left,my=e.clientY-R.top,w=world(mx,my),f=e.deltaY<0?1.12:0.89;scale=Math.max(0.3,Math.min(3.5,scale*f));tx=mx-w.x*scale;ty=my-w.y*scale;};
+  canvas.style.cursor='grab'; loop();
+  return {stop:()=>{stopped=true;cancelAnimationFrame(raf);window.removeEventListener('mouseup',up);}};
+}
+async function renderGraph(v){
+  if(fg){fg.stop();fg=null;}
+  v.innerHTML=`<div class="panel"><div class="row"><h3 style="margin:0">Attack graph</h3>
+    <input id="g_id" size=26 placeholder="engagement_id" value="${selected||''}"><button class="btn" id="g_go">load</button><span class="grow"></span>
+    <span class="muted" style="font-size:11px"><span style="color:#0d9488">●</span>host <span style="color:#0e7490">●</span>port <span style="color:#06b6d4">●</span>service <span style="color:var(--err)">●</span>finding <span style="color:var(--accent)">◆</span>detected <span style="color:var(--node-tech)">◆</span>missed</span>
+    </div><canvas id="g_cv" style="width:100%;height:470px;display:block;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--graph-bg);margin-top:10px"></canvas>
+    <div id="g_note" class="muted" style="font-size:12px;margin-top:6px"></div></div>`;
+  const go=async()=>{ if(fg){fg.stop();fg=null;} const id=$('#g_id').value.trim(); if(!id){$('#g_note').textContent='Enter an engagement id.';return;}
+    $('#g_note').textContent='loading…';
+    let g;try{g=await j('/api/engagements/'+id+'/graph');}catch(e){$('#g_note').textContent='graph unavailable';return;}
+    if(!g.nodes||!g.nodes.length){$('#g_note').innerHTML='No graph for this engagement — seed the KG (<span class="mono">demo-seed.sh</span>) or set REDBLUE_DECEPTICON_NEO4J_PASSWORD.';return;}
+    $('#g_note').innerHTML=`${g.nodes.length} nodes · ${g.edges.length} links &nbsp;·&nbsp; <span class="faint">drag nodes · scroll to zoom · drag background to pan · hover to highlight</span>`;
+    fg=mountForceGraph($('#g_cv'),g);};
+  $('#g_go').onclick=go; if(selected) go();
 }
 
 async function renderEvidence(v){
   v.innerHTML='<div class="panel"><h3>Evidence ledger</h3><div class="row"><input id="ev_id" size=32 placeholder="engagement_id" value="'+(selected||'')+'"><button class="btn" id="ev_go">verify chain</button><span id="ev_badge"></span></div><div id="ev_body" style="margin-top:12px"></div></div>';
-  $('#ev_go').onclick=async()=>{
-    const id=$('#ev_id').value.trim(); if(!id)return;
-    $('#ev_body').innerHTML='<div class="muted">loading…</div>';
+  $('#ev_go').onclick=async()=>{const id=$('#ev_id').value.trim(); if(!id)return; $('#ev_body').innerHTML='<div class="muted">loading…</div>';
     let ev; try{ev=await j('/api/engagements/'+id+'/evidence?verify=true');}catch(e){$('#ev_body').innerHTML='<div class="empty">No evidence for '+id+'.</div>';return;}
     $('#ev_badge').innerHTML=ev.verified?'<span class="pill ok">chain verified ✓</span>':'<span class="pill bad">chain broken ✗</span>';
-    const recs=ev.records||[];
-    $('#ev_body').innerHTML='<table><thead><tr><th>#</th><th>actor</th><th>record</th><th>this_hash</th></tr></thead><tbody>'+
-      recs.map(r=>`<tr><td>${r.seq}</td><td>${r.actor}</td><td>${r.record_type}</td><td class="faint">${(r.this_hash||'').slice(0,16)}…</td></tr>`).join('')+'</tbody></table>';
-  };
+    const recs=ev.records||[]; $('#ev_body').innerHTML='<table><thead><tr><th>#</th><th>actor</th><th>record</th><th>this_hash</th></tr></thead><tbody>'+
+      recs.map(r=>`<tr><td>${r.seq}</td><td>${r.actor}</td><td>${r.record_type}</td><td class="faint">${(r.this_hash||'').slice(0,16)}…</td></tr>`).join('')+'</tbody></table>';};
   if(selected) $('#ev_go').click();
 }
 
-function forceSvg(g,W,H){
-  const idx={}; g.nodes.forEach((n,i)=>{const a=i/g.nodes.length*6.283;n.x=W/2+Math.cos(a)*150;n.y=H/2+Math.sin(a)*120;n.vx=0;n.vy=0;idx[n.id]=n;});
-  for(let it=0;it<320;it++){
-    for(let a=0;a<g.nodes.length;a++)for(let b=a+1;b<g.nodes.length;b++){const na=g.nodes[a],nb=g.nodes[b];let dx=na.x-nb.x,dy=na.y-nb.y,d2=dx*dx+dy*dy||1;const d=Math.sqrt(d2),f=3200/d2;na.vx+=dx/d*f;na.vy+=dy/d*f;nb.vx-=dx/d*f;nb.vy-=dy/d*f;}
-    g.edges.forEach(e=>{const s=idx[e.source],t=idx[e.target];if(!s||!t)return;let dx=t.x-s.x,dy=t.y-s.y,d=Math.sqrt(dx*dx+dy*dy)||1,f=(d-95)*0.03;s.vx+=dx/d*f;s.vy+=dy/d*f;t.vx-=dx/d*f;t.vy-=dy/d*f;});
-    g.nodes.forEach(n=>{n.vx+=(W/2-n.x)*0.003;n.vy+=(H/2-n.y)*0.003;n.x+=Math.max(-8,Math.min(8,n.vx));n.y+=Math.max(-8,Math.min(8,n.vy));n.vx*=0.82;n.vy*=0.82;n.x=Math.max(24,Math.min(W-140,n.x));n.y=Math.max(20,Math.min(H-20,n.y));});
-  }
-  const col=n=>n.kind==='host'?'var(--warn)':n.kind==='technique'?'var(--blue)':(n.detected?'var(--ok)':'var(--crit)');
-  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  const E=g.edges.map(e=>{const s=idx[e.source],t=idx[e.target];return(!s||!t)?'':`<line x1=${s.x.toFixed(1)} y1=${s.y.toFixed(1)} x2=${t.x.toFixed(1)} y2=${t.y.toFixed(1)} stroke="#2a323f"/>`;}).join('');
-  const N=g.nodes.map(n=>{const r=n.kind==='host'?9:7,c=col(n);
-    const shape=n.kind==='technique'
-      ?`<rect x=${(n.x-r).toFixed(1)} y=${(n.y-r).toFixed(1)} width=${2*r} height=${2*r} transform="rotate(45 ${n.x.toFixed(1)} ${n.y.toFixed(1)})" fill="${c}"/>`
-      :`<circle cx=${n.x.toFixed(1)} cy=${n.y.toFixed(1)} r=${r} fill="${c}"/>`;
-    return `${shape}<text x=${(n.x+r+3).toFixed(1)} y=${(n.y+3).toFixed(1)} font-size=10 fill="var(--muted)" font-family="var(--mono)">${esc((n.label||n.id).slice(0,24))}</text>`;
-  }).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="background:var(--bg);border:1px solid var(--line);border-radius:8px">${E}${N}</svg>`;
-}
-async function renderGraph(v){
-  v.innerHTML=`<div class="panel"><div class="row"><h3 style="margin:0">Attack graph</h3>
-    <input id="g_id" size=30 placeholder="engagement_id" value="${selected||''}">
-    <button class="btn" id="g_go">load</button><span class="grow"></span>
-    <span class="muted" style="font-size:12px"><span style="color:var(--warn)">●</span> host &nbsp;<span style="color:var(--ok)">●</span> detected &nbsp;<span style="color:var(--crit)">●</span> missed &nbsp;<span style="color:var(--blue)">◆</span> technique</span>
-    </div><div id="g_wrap" style="margin-top:10px"></div></div>`;
-  const go=async()=>{const id=$('#g_id').value.trim();if(!id){$('#g_wrap').innerHTML='<div class="empty">Enter an engagement id.</div>';return;}
-    $('#g_wrap').innerHTML='<div class="muted">loading…</div>';
-    let g;try{g=await j('/api/engagements/'+id+'/graph');}catch(e){$('#g_wrap').innerHTML='<div class="empty">graph unavailable</div>';return;}
-    $('#g_wrap').innerHTML=(g.nodes&&g.nodes.length)?forceSvg(g,900,460)
-      :'<div class="empty">No attack graph for this engagement — is the KG populated? (try <span class="mono">demo-seed.sh</span>, or set REDBLUE_DECEPTICON_NEO4J_PASSWORD)</div>';};
-  $('#g_go').onclick=go; if(selected) go();
-}
 const RENDER={Posture:renderPosture,Engagements:renderEngagements,Graph:renderGraph,Evidence:renderEvidence};
 function draw(){
+  if(fg){fg.stop();fg=null;}
   $('#nav').innerHTML=TABS.map(t=>`<button class="${t===tab?'on':''}" data-t="${t}">${t}</button>`).join('');
   $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{if(es){es.close();es=null;}tab=b.dataset.t;location.hash=tab;draw();});
   RENDER[tab]($('#view'));

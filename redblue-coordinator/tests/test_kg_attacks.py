@@ -91,3 +91,23 @@ def test_attack_graph_nodes_edges_and_detection_coloring():
     assert fnode["F-nmap"]["detected"] is True and fnode["F-brute"]["detected"] is False
     assert {"source": "10.20.0.9", "target": "F-nmap", "rel": "REACHES"} in g["edges"]
     assert {"source": "F-nmap", "target": "tech:T1046", "rel": "USES"} in g["edges"]
+
+
+def test_kg_graph_builds_typed_nodes_and_edges():
+    from redblue.scoring import kg_graph
+    # RedKGReader.graph() row shape: nid/nl/nk + rt/mid
+    rows = [
+        {"nid": "h1", "nl": ["Host"], "nk": "10.20.0.9", "rt": "HAS_PORT", "mid": "p1"},
+        {"nid": "p1", "nl": ["Port"], "nk": "80/tcp", "rt": "RUNS_SERVICE", "mid": "s1"},
+        {"nid": "s1", "nl": ["Service"], "nk": "http", "rt": None, "mid": None},
+        {"nid": "f1", "nl": ["Finding"], "nk": "sqlmap SQLi", "rt": "USES", "mid": "t1"},
+        {"nid": "t1", "nl": ["Technique"], "nk": "T1190", "rt": None, "mid": None},
+    ]
+    g = kg_graph(rows, detected_techniques=["T1190"])
+    kind = {n["id"]: n["kind"] for n in g["nodes"]}
+    assert kind["h1"] == "host" and kind["p1"] == "port" and kind["s1"] == "service"
+    assert kind["f1"] == "finding" and kind["t1"] == "technique"
+    tnode = next(n for n in g["nodes"] if n["id"] == "t1")
+    fnode = next(n for n in g["nodes"] if n["id"] == "f1")
+    assert tnode["detected"] is True and fnode.get("detected") is True   # finding inherits from its technique
+    assert {"source": "h1", "target": "p1", "rel": "HAS_PORT"} in g["edges"]

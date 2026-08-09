@@ -21,20 +21,34 @@ iso_det=$(date -u -d "@${ts_det}" +%Y-%m-%dT%H:%M:%S.000Z 2>/dev/null || date -u
 
 say() { printf '\n\033[1;36m== %s ==\033[0m\n' "$*"; }
 
-say "1/4  Seed the RED attack graph (Kali tools → Neo4j Finding nodes) for $ENG"
-# 3 attacks on the target: nmap recon (T1046), sqlmap SQLi (T1190), hydra brute (T1110).
+say "1/4  Seed the RED recon+attack graph (Kali tools → Neo4j) for $ENG"
+# A realistic recon chain: Host -> Ports -> Services, with Findings (nmap/sqlmap/hydra) on them and
+# their MITRE techniques. All nodes carry engagement=$ENG so the console's graph endpoint captures them.
 docker exec decepticon-neo4j cypher-shell -u neo4j -p "$NEO4J_PASS" \
-  "MATCH (f:Finding {engagement:'$ENG'}) DETACH DELETE f;" >/dev/null
+  "MATCH (n {engagement:'$ENG'}) DETACH DELETE n;" >/dev/null
 docker exec decepticon-neo4j cypher-shell -u neo4j -p "$NEO4J_PASS" "
-MERGE (h:Host {key:'$TARGET'})
-CREATE (f1:Finding {key:'FIND-$ENG-nmap', engagement:'$ENG', tool:'nmap',   severity:'medium',
-        label:'nmap: 22/80/3306 open on $TARGET',                 mitre_techniques:['T1046'], target:'$TARGET', ts:$ts_atk}),
-       (f2:Finding {key:'FIND-$ENG-sqli', engagement:'$ENG', tool:'sqlmap', severity:'high',
-        label:'sqlmap: SQL injection in /vulnerabilities/sqli id', mitre_techniques:['T1190'], target:'$TARGET', ts:$ts_atk}),
-       (f3:Finding {key:'FIND-$ENG-brute',engagement:'$ENG', tool:'hydra',  severity:'high',
-        label:'hydra: weak creds admin:password on /login.php',   mitre_techniques:['T1110'], target:'$TARGET', ts:$ts_atk}),
-       (h)-[:REACHES]->(f1), (h)-[:REACHES]->(f2), (h)-[:REACHES]->(f3);" >/dev/null
-echo "   seeded 3 Finding nodes (T1046 nmap, T1190 sqlmap, T1110 hydra) on $TARGET"
+MERGE (h:Host {key:'$TARGET'}) SET h.engagement='$ENG', h.label='$TARGET'
+CREATE (p22:Port{key:'$ENG:22', engagement:'$ENG', label:'22/tcp'}),
+       (p80:Port{key:'$ENG:80', engagement:'$ENG', label:'80/tcp'}),
+       (p3306:Port{key:'$ENG:3306', engagement:'$ENG', label:'3306/tcp'}),
+       (ssh:Service{key:'$ENG:ssh', engagement:'$ENG', label:'ssh OpenSSH'}),
+       (http:Service{key:'$ENG:http', engagement:'$ENG', label:'http DVWA'}),
+       (mysql:Service{key:'$ENG:mysql', engagement:'$ENG', label:'mysql'}),
+       (t46:Technique{key:'$ENG:T1046', engagement:'$ENG', label:'T1046'}),
+       (t90:Technique{key:'$ENG:T1190', engagement:'$ENG', label:'T1190'}),
+       (t10:Technique{key:'$ENG:T1110', engagement:'$ENG', label:'T1110'}),
+       (f1:Finding{key:'FIND-$ENG-nmap', engagement:'$ENG', tool:'nmap', severity:'medium',
+        label:'nmap: 22/80/3306 open', mitre_techniques:['T1046'], target:'$TARGET', ts:$ts_atk}),
+       (f2:Finding{key:'FIND-$ENG-sqli', engagement:'$ENG', tool:'sqlmap', severity:'high',
+        label:'sqlmap: SQLi /sqli id', mitre_techniques:['T1190'], target:'$TARGET', ts:$ts_atk}),
+       (f3:Finding{key:'FIND-$ENG-brute', engagement:'$ENG', tool:'hydra', severity:'high',
+        label:'hydra: weak ssh creds', mitre_techniques:['T1110'], target:'$TARGET', ts:$ts_atk}),
+       (h)-[:HAS_PORT]->(p22), (h)-[:HAS_PORT]->(p80), (h)-[:HAS_PORT]->(p3306),
+       (p22)-[:RUNS_SERVICE]->(ssh), (p80)-[:RUNS_SERVICE]->(http), (p3306)-[:RUNS_SERVICE]->(mysql),
+       (h)-[:REACHES]->(f1), (h)-[:REACHES]->(f2), (h)-[:REACHES]->(f3),
+       (f1)-[:AGAINST]->(h), (f2)-[:AGAINST]->(http), (f3)-[:AGAINST]->(ssh),
+       (f1)-[:USES]->(t46), (f2)-[:USES]->(t90), (f3)-[:USES]->(t10);" >/dev/null
+echo "   seeded recon graph: 1 host · 3 ports · 3 services · 3 findings · 3 techniques"
 
 say "2/4  Seed the BLUE detections (Wazuh/Suricata alerts → custom-vigil → Vigil ingest)"
 # Suricata DETECTS the nmap scan (T1046); Wazuh DETECTS the SQLi (T1190). The hydra brute (T1110) is
