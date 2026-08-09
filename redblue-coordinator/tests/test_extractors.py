@@ -35,3 +35,20 @@ def test_findings_to_detections_maps_and_excludes_red_origin():
     assert dets[0]["finding_id"] == "f-20260805-1111111111111111"
     expected = datetime(2026, 8, 5, 0, 16, 50, tzinfo=UTC).timestamp()
     assert abs(dets[0]["ts"] - expected) < 1.0               # ISO parsed to epoch
+
+
+def test_findings_to_detections_tolerates_nondict_fields():
+    # Vigil serves a mixed finding population; a row with entity_context/mitre_predictions as a
+    # non-dict (int/str) or a non-dict finding must NOT crash the engagement (regression: 'int'.get).
+    findings = [
+        {"finding_id": "f-1", "data_source": "wazuh", "timestamp": 1000.0,
+         "mitre_predictions": 0, "entity_context": 5},                 # ints, not dicts
+        {"finding_id": "f-2", "data_source": "suricata", "timestamp": 1001.0,
+         "mitre_predictions": {"T1046": 1.0}, "entity_context": {"dst_ip": "10.20.0.9"}},  # valid
+        42,                                                            # not even a dict
+        {"finding_id": "f-3", "data_source": "decepticon"},           # excluded (red-origin)
+    ]
+    dets = findings_to_detections(findings, exclude_data_sources=["decepticon"])
+    # only the valid suricata finding yields a detection; the odd rows are skipped, not fatal
+    assert dets == [{"technique": "T1046", "entity": "10.20.0.9", "ts": 1001.0,
+                     "finding_id": "f-2", "text": "", "evidence_refs": ["f-2"]}]

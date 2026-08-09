@@ -144,10 +144,15 @@ def findings_to_detections(findings: Iterable[dict], *, exclude_data_sources: It
     excluded = set(exclude_data_sources)
     out: list[dict] = []
     for f in findings:
-        if f.get("data_source") in excluded:
+        # Vigil serves a mixed finding population (SCA/CIS, native, coordinator-ingested); some rows
+        # carry mitre_predictions/entity_context as non-dicts (int/str/list) or aren't dicts at all.
+        # Be defensive so one odd finding can't crash the whole engagement (real bug: 'int'.get).
+        if not isinstance(f, dict) or f.get("data_source") in excluded:
             continue
-        mp = f.get("mitre_predictions") or {}
-        ec = f.get("entity_context") or {}
+        mp = f.get("mitre_predictions")
+        mp = mp if isinstance(mp, dict) else {}
+        ec = f.get("entity_context")
+        ec = ec if isinstance(ec, dict) else {}
         entity = ec.get("dst_ip") or ec.get("src_ip") or ec.get("hostname") or ec.get("affected_target") or ""
         ts = _epoch(f.get("timestamp"))
         fid = f.get("finding_id")

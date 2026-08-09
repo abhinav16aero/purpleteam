@@ -16,6 +16,7 @@ TEL_PROF := $(foreach p,$(PROFILES),--profile $(p))   # e.g. PROFILES=target bri
 # red+blue local model; override on the CLI: make ollama OLLAMA_MODEL=<tag>. (No inline comment on
 # the next line — Make would fold the trailing spaces into the value and break `ollama pull`.)
 OLLAMA_MODEL ?= qwen2.5-coder:7b
+export OLLAMA_MODEL                                   # so `docker compose` sees it for ${OLLAMA_MODEL} interpolation
 
 .PHONY: net dec-env ollama certs red-only blue-only telemetry lab up down logs ps config health clean help
 

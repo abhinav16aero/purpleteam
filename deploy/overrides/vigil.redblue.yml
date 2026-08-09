@@ -17,14 +17,14 @@
 services:
   backend:
     environment:
-      - DEFAULT_MODEL=ollama/qwen2.5-coder:7b   # override cloud default → local (plan 03)
+      - DEFAULT_MODEL=ollama/${OLLAMA_MODEL:-qwen2.5-coder:7b}   # override cloud default → local (plan 03)
       - DEV_MODE=true                            # enclave-only — see header warning
     networks:
       - redblue-shared          # + deeptempo-network
 
   soc-daemon:
     environment:
-      - DEFAULT_MODEL=ollama/qwen2.5-coder:7b
+      - DEFAULT_MODEL=ollama/${OLLAMA_MODEL:-qwen2.5-coder:7b}
       - DEV_MODE=true
     ports: !override            # REPLACE the base list (host 8081 → 8082; internal stays 8081)
       - "8082:8081"
@@ -35,8 +35,14 @@ services:
 
   llm-worker:
     environment:
-      - DEFAULT_MODEL=ollama/qwen2.5-coder:7b
+      - DEFAULT_MODEL=ollama/${OLLAMA_MODEL:-qwen2.5-coder:7b}
       - DEV_MODE=true
+    # The ARQ worker has no HTTP endpoint, so the base image's healthcheck never passes and blocks
+    # `make up --wait`. It's NOT on the prototype critical path (the coordinator + the Wazuh→Vigil
+    # ingest both use `backend`, which is healthy). Disable the probe so up/wait doesn't gate on it.
+    # (If you later want Vigil's autonomous daemon, re-enable and debug the worker separately.)
+    healthcheck:
+      disable: true
     networks:
       - redblue-shared          # LLM path (→ bifrost → ollama)
 

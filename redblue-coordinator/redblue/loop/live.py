@@ -117,8 +117,11 @@ class _VigilDetectionSource:
         # by technique+entity+time (plan 05 §8), so we must NOT pre-filter by engagement (that was a
         # bug that zeroed the detection numerator). Pull recent sensor-origin findings and bound to
         # the scoring window; correlate() enforces the technique+entity match.
-        findings = self._client.list_findings(limit=500)
-        dets = findings_to_detections(findings, exclude_data_sources=["decepticon"])
+        try:
+            findings = self._client.list_findings(limit=500)
+            dets = findings_to_detections(findings, exclude_data_sources=["decepticon"])
+        except Exception:  # noqa: BLE001 — a Vigil/findings error must not abort the engagement (score 0 detected)
+            return []
         t0 = (window or {}).get("t_start")
         t1 = (window or {}).get("settle_deadline") or (window or {}).get("t_end")
         if t0 is not None and t1 is not None:
