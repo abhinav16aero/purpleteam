@@ -33,6 +33,13 @@ deploy/.env
 telemetry/**/data/
 **/coordinator_data/
 *.pcap
+# …but **/logs/ and **/workspace/ above must NOT swallow application SOURCE under webapp/src:
+# Next.js API-route dirs literally named logs/ or workspace/ are code there, not runtime spill.
+# Targeted to those dir names only, so nested node_modules/.vite build junk stays ignored.
+!webapp/src/**/logs/
+!webapp/src/**/logs/**
+!webapp/src/**/workspace/
+!webapp/src/**/workspace/**
 
 # OS / editor
 .DS_Store
