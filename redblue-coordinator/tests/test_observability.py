@@ -1,12 +1,16 @@
 """P9 observability (plan 09 §1.4/§2) — Prometheus metrics, posture aggregate, SSE timeline."""
 from __future__ import annotations
 
+import hashlib
+import hmac
+
 import pytest
 from fastapi.testclient import TestClient
 
 from redblue.api import create_app
 from redblue.evidence.store import EvidenceStore
 from redblue.loop import Deps
+from redblue.obs.mitre import build_mitre_rollup
 from redblue.obs.posture import build_posture
 from redblue.scoring import StaticCoverageOracle
 from redblue.store import CoordinatorStore
@@ -37,7 +41,7 @@ def client():
 
 
 def test_metrics_endpoint_after_engagement(client):
-    client.post("/api/engagements", json={"tenant_id": "t01", "engagement_id": "eng-t01-20260805-obs1",
+    client.post("/api/engagements", json={"tenant_id": "t01", "hitl_enabled": False, "engagement_id": "eng-t01-20260805-obs1",
                                           "scope": {"sandbox_url": "http://sandbox:9999"}})
     body = client.get("/metrics").text
     assert "redblue_engagements_total" in body
@@ -47,7 +51,7 @@ def test_metrics_endpoint_after_engagement(client):
 
 
 def test_posture_aggregate(client):
-    client.post("/api/engagements", json={"tenant_id": "t01", "engagement_id": "eng-t01-20260805-p1",
+    client.post("/api/engagements", json={"tenant_id": "t01", "hitl_enabled": False, "engagement_id": "eng-t01-20260805-p1",
                                           "scope": {"sandbox_url": "http://sandbox:9999"}})
     p = client.get("/api/posture").json()
     assert p["engagements"] == 1
@@ -59,8 +63,65 @@ def test_posture_aggregate(client):
     assert p["gap_count"] == 1
 
 
+def test_mitre_rollup(client):
+    client.post("/api/engagements", json={"tenant_id": "t01", "hitl_enabled": False, "engagement_id": "eng-t01-20260805-m1",
+                                          "scope": {"sandbox_url": "http://sandbox:9999"}})
+    r = client.get("/api/mitre").json()
+    assert r["scorecards"] == 1
+    assert r["totals"] == {"attacked": 2, "detected": 1}
+    assert r["detection_rate"] == 0.5
+    by = {t["technique_id"]: t for t in r["techniques"]}
+    assert by["T1046"]["detected"] == 1 and by["T1046"]["detection_rate"] == 1.0
+    assert by["T1190"]["detected"] == 0 and by["T1190"]["detection_rate"] == 0.0
+
+
+def test_mitre_rollup_pure():
+    scs = [
+        {"per_technique": [{"technique_id": "T1046", "attacked": 2, "detected": 2, "missed": 0, "mttd_seconds": 8.0},
+                           {"technique_id": "T1190", "attacked": 1, "detected": 0, "missed": 1}]},
+        {"per_technique": [{"technique_id": "T1046", "attacked": 1, "detected": 0, "missed": 1},
+                           {"technique_id": "T1110", "attacked": 3, "detected": 3, "missed": 0, "mttd_seconds": 12.0}]},
+    ]
+    out = build_mitre_rollup(scs)
+    by = {t["technique_id"]: t for t in out["techniques"]}
+    assert out["scorecards"] == 2 and out["technique_count"] == 3
+    # T1046 is aggregated across both engagements: 3 attacked, 2 detected, seen in 2 engagements
+    assert by["T1046"]["attacked"] == 3 and by["T1046"]["detected"] == 2 and by["T1046"]["engagements"] == 2
+    assert by["T1046"]["detection_rate"] == 2 / 3
+    assert by["T1046"]["mttd_seconds"] == 8.0     # detected-weighted: only the first engagement detected T1046
+    assert out["totals"] == {"attacked": 7, "detected": 5}
+    assert build_mitre_rollup([]) == {"scorecards": 0, "technique_count": 0,
+                                      "totals": {"attacked": 0, "detected": 0}, "detection_rate": None, "techniques": []}
+
+
+def test_evidence_bundle_export(client, monkeypatch):
+    monkeypatch.delenv("REDBLUE_EVIDENCE_SIGNING_KEY", raising=False)
+    client.post("/api/engagements", json={"tenant_id": "t01", "hitl_enabled": False, "engagement_id": "eng-t01-20260805-bundle",
+                                          "scope": {"sandbox_url": "http://sandbox:9999"}})
+    r = client.get("/api/engagements/eng-t01-20260805-bundle/evidence/bundle")
+    assert r.status_code == 200
+    assert 'filename="evidence-eng-t01-20260805-bundle.json"' in r.headers["content-disposition"]
+    b = r.json()
+    assert b["bundle_version"] == 1 and b["engagement_id"] == "eng-t01-20260805-bundle"
+    assert b["count"] == len(b["records"]) and b["count"] >= 1
+    assert b["digest_algo"] == "sha256" and len(b["bundle_digest"]) == 64
+    assert b["signed"] is False and b["signature"] is None and b["signature_algo"] is None
+    assert b["verified"] is True and b["chain_head"] == b["records"][-1]["this_hash"]
+    assert client.get("/api/engagements/ghost/evidence/bundle").status_code == 404
+
+
+def test_evidence_bundle_signed(client, monkeypatch):
+    monkeypatch.setenv("REDBLUE_EVIDENCE_SIGNING_KEY", "s3cret-signing-key")
+    client.post("/api/engagements", json={"tenant_id": "t01", "hitl_enabled": False, "engagement_id": "eng-t01-20260805-signed",
+                                          "scope": {"sandbox_url": "http://sandbox:9999"}})
+    b = client.get("/api/engagements/eng-t01-20260805-signed/evidence/bundle").json()
+    assert b["signed"] is True and b["signature_algo"] == "hmac-sha256"
+    expect = hmac.new(b"s3cret-signing-key", b["bundle_digest"].encode(), hashlib.sha256).hexdigest()
+    assert b["signature"] == expect
+
+
 def test_sse_timeline(client):
-    client.post("/api/engagements", json={"tenant_id": "t01", "engagement_id": "eng-t01-20260805-sse",
+    client.post("/api/engagements", json={"tenant_id": "t01", "hitl_enabled": False, "engagement_id": "eng-t01-20260805-sse",
                                           "scope": {"sandbox_url": "http://sandbox:9999"}})
     r = client.get("/api/engagements/eng-t01-20260805-sse/events")
     assert r.status_code == 200 and "text/event-stream" in r.headers["content-type"]

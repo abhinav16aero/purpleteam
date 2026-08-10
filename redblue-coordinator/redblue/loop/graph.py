@@ -48,4 +48,8 @@ def build_graph(deps: Deps, checkpointer: Any | None = None):
     # graph. The in-graph `watch_drift` node (an alternative representation) is the live slice.
     g.add_conditional_edges("report_evidence", route_after_report, {"continue": END, "done": END})
 
+    # Human-in-the-loop over the ATTACK PLAN (§2.3) is applied PER-RUN, not baked into the graph:
+    # create_engagement passes `interrupt_before=["trigger_red"]` at invoke time only when HITL is on
+    # (holding the checkpointed run before red executes, resumed by POST …/plan/approve). Compiling
+    # without a global interrupt keeps every other consumer — direct tests, continuous replays — inline.
     return g.compile(checkpointer=checkpointer)

@@ -5,6 +5,13 @@ rules_file:
 json_output: true
 json_include_output_property: true
 priority: notice                 # drop Debug/Info before shipping (noise control)
+# Falco → Wazuh lane (plan 04): write JSON events to a file on the shared `falco_logs` volume so the
+# Wazuh manager tails them exactly like Suricata's eve.json (manager <localfile> + rules/falco_rules.xml
+# → custom-vigil → Vigil finding). This is the wired path; falcosidekick/Kafka stays available for later.
+file_output:
+  enabled: true
+  keep_alive: false
+  filename: /var/log/falco/events.json
 # Keep the escape/IMDS/privileged/shell-in-container rules hot; baseline the target's benign
 # exec/writes with local rules (falco_rules.local.yaml) before attacking (plan 04 §5).
 grpc:

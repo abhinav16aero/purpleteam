@@ -204,6 +204,11 @@ def kg_graph(rows: Iterable[dict], *, detected_techniques: Iterable[str] = ()) -
             continue
         a = add(r.get("nid"), r.get("nl"), r.get("nk"))
         rt, mid = r.get("rt"), r.get("mid")
+        # neighborhood-expansion rows (RedKGReader.neighbors) also carry the far node's labels/key
+        # in `ml`/`mk` so the subgraph is self-contained; the full-graph query omits them (every node
+        # is already an `n` row there) so this stays a no-op for it.
+        if isinstance(mid, str) and r.get("ml") is not None:
+            add(mid, r.get("ml"), r.get("mk"))
         if a and isinstance(rt, str) and isinstance(mid, str):
             key = (a, mid, rt)
             if key not in seen:

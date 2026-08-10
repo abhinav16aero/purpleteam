@@ -1,0 +1,31 @@
+# deploy/overrides/ollama.gpu.yml — give the shared Ollama an NVIDIA GPU (GPU host only, e.g. Shakti).
+#
+# The base docker-compose.redblue.yml runs Ollama CPU-only, which is safe on any host. Layer THIS file
+# on top ONLY on a host with an NVIDIA GPU + the nvidia-container-toolkit installed:
+#
+#   docker compose -p coordinator -f docker-compose.redblue.yml -f overrides/ollama.gpu.yml up -d --wait
+#   # or, via the Makefile:  make up GPU=1   /   make demo GPU=1
+#
+# Then pull a real tool-calling model the GPU can drive (much stronger than the CPU 7B ceiling) and
+# point BOTH engines at it:
+#   OLLAMA_MODEL=qwen2.5:14b make ollama GPU=1     # or qwen2.5:32b on a big card
+#   sed -i 's#^OLLAMA_MODEL=.*#OLLAMA_MODEL=qwen2.5:14b#' ../Decepticon/.env
+#
+# Verify the GPU is actually attached:
+#   docker exec redblue-ollama nvidia-smi        # lists the GPU
+#   docker exec redblue-ollama ollama ps         # a loaded model shows 100% GPU
+services:
+  ollama:
+    environment:
+      # With a GPU the model stays hot AND can serve a couple of concurrent agent turns (the CPU base
+      # forces NUM_PARALLEL=1 because parallelism just splits scarce cores).
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_MAX_LOADED_MODELS=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all               # or a specific count, e.g. 1
+              capabilities: [gpu]

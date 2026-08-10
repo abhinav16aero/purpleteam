@@ -24,3 +24,16 @@ class EngagementCreatedResponse(BaseModel):
     status: str
     scorecard_id: str | None = None
     detection_rate: float | None = None
+    # present when status == "awaiting_plan_approval" — the editable plan a human must review (§2.3)
+    plan: dict[str, Any] | None = None
+
+
+class PlanPatchRequest(BaseModel):
+    """Operator edits to a paused attack plan. `instruction` is the directive red actually runs."""
+    instruction: str | None = None
+    objective: str | None = None
+    in_scope: list[str] | None = None
+
+
+class PlanRejectRequest(BaseModel):
+    reason: str = "rejected by operator"

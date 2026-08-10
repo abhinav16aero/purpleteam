@@ -21,6 +21,7 @@ class LoopState(TypedDict, total=False):
     instruction: str
     workspace_path: str
     version: int
+    plan: dict[str, Any]          # the editable attack plan a human reviews before red runs (HITL, §2.3)
 
     # red side
     red_run: dict[str, Any]       # {thread_id, run_id, status, started_at, ended_at}

@@ -41,6 +41,8 @@ services:
       - ./wazuh/certs/wazuh.manager-key.pem:/etc/ssl/filebeat-key.pem:ro
       - suricata_logs:/var/log/suricata:ro                          # Suricata eve.json (native decoders)
       - dvwa_logs:/var/log/dvwa-apache:ro                           # DVWA apache access log (web-attack rules)
+      - falco_logs:/var/log/falco:ro                                # Falco events.json (rules/falco_rules.xml)
+      - ./wazuh/rules/falco_rules.xml:/var/ossec/etc/rules/falco_rules.xml:ro   # classify Falco → level≥5 + MITRE
     networks: [telemetry-net, redblue-shared]
     restart: unless-stopped
 
@@ -102,10 +104,11 @@ services:
   # `wazuh-agent` image (the agent is a host package). This is the standard single-node pattern.
 
   # ── Falco: container/K8s runtime (eBPF). Runtime sensor. ──
-  # NOTE (P2 remaining item): Falco→canonical-finding shaping is not yet wired — options are
-  # (a) Falcosidekick→Kafka `security.findings` (Vigil's existing consumer; needs kafka on the bus),
-  # or (b) the hardened /api/webhooks/wazuh receiver (P5) accepting Falco payloads. The Wazuh+Suricata
-  # lane (tested) covers host+network; Falco adds container-escape/IMDS coverage when shaped. See ADR-0003.
+  # WIRED to blue via the file lane: Falco writes JSON to falco_logs:/var/log/falco/events.json, the
+  # Wazuh manager tails it (<localfile> + rules/falco_rules.xml → level≥5 with MITRE), and custom-vigil
+  # forwards it to Vigil as a finding — the same shared-volume pattern as Suricata's eve.json. This adds
+  # container-escape / shell-in-container / IMDS coverage on top of Wazuh+Suricata (host+network).
+  # (falcosidekick→Kafka stays available for a future stream lane; the file lane is what runs today.)
   falco:
     image: falcosecurity/falco:latest
     container_name: falco
@@ -114,6 +117,7 @@ services:
       - /var/run/docker.sock:/host/var/run/docker.sock
       - /proc:/host/proc:ro
       - ./falco/falco.yaml:/etc/falco/falco.yaml:ro
+      - falco_logs:/var/log/falco                                   # events.json → tailed by wazuh.manager
     networks: [telemetry-net]
     restart: unless-stopped
 
@@ -144,6 +148,7 @@ volumes:
   wazuh_indexer_data:
   suricata_logs:
   dvwa_logs:
+  falco_logs:            # Falco events.json shared from falco → wazuh.manager (Falco → Wazuh → Vigil)
 
 networks:
   telemetry-net:

@@ -42,7 +42,7 @@ def client():
 
 def test_global_kill_then_engagement_refused(client):
     # governed engagement runs and queues human-tier actions
-    r = client.post("/api/engagements", json={"tenant_id": "t01", "engagement_id": "eng-t01-20260805-run1",
+    r = client.post("/api/engagements", json={"tenant_id": "t01", "hitl_enabled": False, "engagement_id": "eng-t01-20260805-run1",
                                               "scope": {"sandbox_url": "http://sandbox:9999"}})
     assert r.status_code == 200 and r.json()["status"] == "completed"
 
@@ -51,7 +51,7 @@ def test_global_kill_then_engagement_refused(client):
     assert kill.status_code == 200 and kill.json()["halted"] is True
 
     # a new engagement is now refused cleanly (kill switch active) → 409
-    r2 = client.post("/api/engagements", json={"tenant_id": "t01", "engagement_id": "eng-t01-20260805-run2"})
+    r2 = client.post("/api/engagements", json={"tenant_id": "t01", "hitl_enabled": False, "engagement_id": "eng-t01-20260805-run2"})
     assert r2.status_code == 409
 
 
@@ -59,6 +59,6 @@ def test_tenant_kill_scoped(client):
     k = client.post("/api/tenants/t02/kill", json={"by": "rahul", "reason": "tenant incident"})
     assert k.json()["tenant_id"] == "t02" and k.json()["halted"] is True
     # t01 still runs
-    r = client.post("/api/engagements", json={"tenant_id": "t01", "engagement_id": "eng-t01-20260805-ok",
+    r = client.post("/api/engagements", json={"tenant_id": "t01", "hitl_enabled": False, "engagement_id": "eng-t01-20260805-ok",
                                               "scope": {"sandbox_url": "http://sandbox:9999"}})
     assert r.status_code == 200

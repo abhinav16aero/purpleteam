@@ -37,7 +37,7 @@ def client():
 def test_drift_dry_run_then_approve_rescores(client):
     eng = "eng-t01-20260805-cont"
     # 1) initial engagement → Scorecard v1
-    r = client.post("/api/engagements", json={"tenant_id": "t01", "engagement_id": eng,
+    r = client.post("/api/engagements", json={"tenant_id": "t01", "hitl_enabled": False, "engagement_id": eng,
                                               "mode": "continuous", "scope": {"sandbox_url": "http://sandbox:9999"}})
     assert r.status_code == 200
     assert client.get(f"/api/engagements/{eng}/scorecard").json()["version"] == 1

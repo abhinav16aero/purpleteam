@@ -69,6 +69,36 @@ class RedKGReader:
             engagement,
         )
 
+    # neighborhood expansion for the interactive graph (§8/§29 "expand neighbors"). STILL scoped:
+    # both the anchor and every neighbor must carry this engagement, so an expand can never walk
+    # across the tenant boundary. Emits the anchor AND each neighbor as a node (ml/mk) so the
+    # returned rows build a self-contained {nodes, edges} subgraph.
+    def neighbors(self, engagement: str, node_id: str) -> list[dict]:
+        return self._read(
+            "MATCH (n) WHERE elementId(n)=$node AND n.engagement=$engagement "
+            "OPTIONAL MATCH (n)-[r]-(m) WHERE m.engagement=$engagement "
+            "RETURN elementId(n) AS nid, labels(n) AS nl, "
+            "coalesce(n.key,n.label,n.name,elementId(n)) AS nk, "
+            "type(r) AS rt, elementId(m) AS mid, labels(m) AS ml, "
+            "coalesce(m.key,m.label,m.name,elementId(m)) AS mk",
+            engagement, node=node_id,
+        )
+
+    # shortest path between two nodes for attack-path tracing (§13/§29). Scoped: both endpoints and
+    # every hop must carry this engagement. Returns one row {pnodes, pedges} (empty list if no path).
+    def shortest_path(self, engagement: str, source: str, target: str) -> list[dict]:
+        return self._read(
+            "MATCH (a) WHERE elementId(a)=$source AND a.engagement=$engagement "
+            "MATCH (b) WHERE elementId(b)=$target AND b.engagement=$engagement "
+            "MATCH p=shortestPath((a)-[*..8]-(b)) "
+            "WHERE all(x IN nodes(p) WHERE x.engagement=$engagement) "
+            "RETURN [x IN nodes(p) | {id:elementId(x), nl:labels(x), "
+            "  nk:coalesce(x.key,x.label,x.name,elementId(x))}] AS pnodes, "
+            "[r IN relationships(p) | {s:elementId(startNode(r)), t:elementId(endNode(r)), "
+            "  rel:type(r)}] AS pedges",
+            engagement, source=source, target=target,
+        )
+
     # blue_cell ground truth: DetectionFired -[:DETECTED]-> t, -[:USES_RULE]-> rule
     def detection_coverage(self, engagement: str) -> list[dict]:
         return self._read(

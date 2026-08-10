@@ -1,0 +1,35 @@
+{
+  "$schema": "https://www.getbifrost.ai/schema",
+  "_comment": "SOVEREIGN Bifrost seed (P1 / plan 03). Ollama-ONLY: Anthropic + OpenAI providers are stripped, so Bifrost physically cannot route to a foreign API even if a stray cloud model name is requested. Delivered into vigil/docker/bifrost/ by setup.sh's overlay copy; mounted via deploy/overrides/vigil.redblue.yml.",
+  "client": {
+    "enable_logging": true,
+    "disable_content_logging": false
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "./logs.db"
+    }
+  },
+  "providers": {
+    "ollama": {
+      "network_config": {
+        "default_request_timeout_in_seconds": 1800,
+        "allow_private_network": true
+      },
+      "keys": [
+        {
+          "name": "default-ollama-url",
+          "weight": 1,
+          "ollama_key_config": {
+            "url": "env.OLLAMA_URL"
+          },
+          "models": [
+            "*"
+          ]
+        }
+      ]
+    }
+  }
+}

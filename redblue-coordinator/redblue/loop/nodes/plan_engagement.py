@@ -30,14 +30,29 @@ def make_plan_engagement(deps: Deps):
             errors.append({"node": "plan_engagement", "warn": "HITL disabled (P5 will hard-refuse)"})
 
         now = deps.clock()
+        # The editable attack plan a human reviews before red executes (graph interrupts before
+        # trigger_red when HITL is on). `instruction` is the ONLY directive that reaches Decepticon's
+        # agents, so it is the primary editable field; scope/objective ride along for the operator.
+        scope = state.get("scope") or {}
+        plan = {
+            "engagement_id": eng, "tenant_id": tenant,
+            "objective": "Recon the in-scope assets, then attempt and validate exploitation of the "
+                         "highest-value findings.",
+            "instruction": state.get("instruction", ""),
+            "in_scope": scope.get("in_scope", []),
+            "sandbox_url": scope.get("sandbox_url"),
+            "enforcement_mode": enforce, "hitl_enabled": hitl,
+            "mode": state.get("mode", "on_demand"),
+            "status": "proposed", "proposed_at": now,
+        }
         rec = deps.evidence.append(
             engagement_id=eng, tenant_id=tenant, actor="coordinator",
             record_type="engagement.planned", ts=now,
-            payload={"scope": state.get("scope", {}), "budget": state.get("budget", {}),
+            payload={"scope": scope, "budget": state.get("budget", {}),
                      "enforcement_mode": enforce, "hitl_enabled": hitl,
-                     "mode": state.get("mode", "on_demand")},
+                     "mode": state.get("mode", "on_demand"), "plan": plan},
         )
-        out: dict = {"status": "running", "window": {"t_start": now},
+        out: dict = {"status": "running", "window": {"t_start": now}, "plan": plan,
                      "version": state.get("version", 1), "evidence_refs": [rec.this_hash]}
         if errors:
             out["errors"] = errors

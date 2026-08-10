@@ -1,8 +1,7 @@
 # ── RedBlue AI superproject .gitignore (plan 01 §6.3) ──
-# The three reused engines are REPRODUCED by setup.sh from manifest.toml — never committed here.
-/Decepticon/
-/vigil/
-/vigil-llm/
+# The three engines (Decepticon / vigil / vigil-llm) are now VENDORED here as a self-contained
+# deployable (source only — their venv/node_modules/.env stay ignored by the patterns below).
+# They were previously reproduced by setup.sh from manifest.toml; that path still works to refresh them.
 
 # Python envs / build
 **/.venv/
@@ -15,6 +14,10 @@
 
 # Node
 **/node_modules/
+**/frontend/build/
+**/frontend/dist/
+**/.next/
+**/.turbo/
 
 # Secrets / env (never commit; *.example IS committed)
 **/.env

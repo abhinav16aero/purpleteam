@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
 from ...obs import render
+from ...obs.mitre import build_mitre_rollup
 from ...obs.posture import build_posture
 
 router = APIRouter()
@@ -51,6 +52,66 @@ async def engagement_graph(engagement_id: str, request: Request) -> dict:
     if graph_rows:
         return kg_graph(graph_rows, detected_techniques=detected)
     return attack_graph(surface_rows, detected_techniques=detected)
+
+
+@router.get("/api/mitre")
+async def mitre_rollup(request: Request, tenant_id: str | None = None) -> dict:
+    """ATT&CK coverage rolled up across every engagement's latest scorecard (prompt §21) — the org-wide
+    MITRE matrix, versus the per-engagement view the scorecard already gives."""
+    scorecards = request.app.state.store.list_scorecards(tenant_id=tenant_id)
+    return build_mitre_rollup(scorecards)
+
+
+@router.get("/api/sensors")
+async def sensors() -> dict:
+    """Component health the coordinator can ACTUALLY probe — nothing fabricated. It reports itself
+    (up), a live Neo4j connectivity check, and declares the telemetry sensors (Wazuh/Suricata/Falco)
+    as `external` (their health is owned by the telemetry stack / Prometheus, not the coordinator), so
+    the UI can show a Vigil `connections/status` panel beside these rather than invent CPU sparklines."""
+    import time
+
+    import neo4j
+
+    from ...config.settings import get_settings
+
+    s = get_settings()
+    out: list[dict] = [{"name": "Coordinator", "kind": "LangGraph", "status": "healthy", "source": "self"}]
+    if s.decepticon_neo4j_password:
+        st, lat = "down", None
+        try:
+            drv = neo4j.GraphDatabase.driver(
+                s.decepticon_neo4j_uri, auth=(s.decepticon_neo4j_user, s.decepticon_neo4j_password),
+                connection_timeout=2.0)
+            t0 = time.perf_counter()
+            drv.verify_connectivity()                      # connection probe only — not a scoped read
+            lat = round((time.perf_counter() - t0) * 1000, 1)
+            st = "healthy"
+            drv.close()
+        except Exception:  # noqa: BLE001 — a down dependency is a status, not a 500
+            st = "down"
+        out.append({"name": "Neo4j", "kind": "Knowledge Graph", "status": st, "latency_ms": lat, "source": "probe"})
+    else:
+        out.append({"name": "Neo4j", "kind": "Knowledge Graph", "status": "unconfigured", "source": "probe"})
+    for nm, kind in (("Wazuh", "HIDS / SIEM"), ("Suricata", "NIDS"), ("Falco", "Runtime")):
+        out.append({"name": nm, "kind": kind, "status": "external", "source": "telemetry",
+                    "note": "health reported by the telemetry stack, not the coordinator"})
+    return {"sensors": out}
+
+
+@router.get("/api/agents")
+async def agents(request: Request, tenant_id: str | None = None) -> dict:
+    """The coordinator's HONEST view of the red side: per-agent telemetry (Decepticon's ~25 agents) is
+    internal to Decepticon and not exposed here, so this reports the red-RUN execution status per
+    engagement (what the coordinator actually drives). The blue roster (Vigil's 13 agents) comes from
+    Vigil's own /api/agents — the AI-Agents screen composes both."""
+    engs = request.app.state.store.list_engagements(tenant_id=tenant_id)
+    runs = [{"engagement_id": e.get("engagement_id"), "tenant_id": e.get("tenant_id"),
+             "status": e.get("status"), "thread_id": e.get("thread_id"),
+             "target": e.get("target"), "team": "red", "role": "Decepticon red run"}
+            for e in engs]
+    return {"team": "red", "engine": "Decepticon",
+            "note": "per-agent detail is internal to Decepticon; the coordinator reports red-run status per engagement",
+            "runs": runs, "active": sum(1 for r in runs if r["status"] == "running")}
 
 
 @router.get("/api/engagements/{engagement_id}/events")

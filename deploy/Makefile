@@ -6,7 +6,8 @@ DEC := docker compose -p decepticon --env-file env/decepticon.env \
          -f ../Decepticon/docker-compose.yml -f overrides/decepticon.redblue.yml
 VIG := docker compose -p vigil --env-file env/vigil.env \
          -f ../vigil/docker/docker-compose.yml -f overrides/vigil.redblue.yml
-CO  := docker compose -p coordinator -f docker-compose.redblue.yml
+# GPU=1 layers the NVIDIA reservation onto the shared Ollama (GPU host, e.g. Shakti). Base is CPU-only.
+CO  := docker compose -p coordinator -f docker-compose.redblue.yml $(if $(GPU),-f overrides/ollama.gpu.yml)
 TEL := docker compose -p telemetry -f ../telemetry/docker-compose.telemetry.yml
 
 PROFILES ?=

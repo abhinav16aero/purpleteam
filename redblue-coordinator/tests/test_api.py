@@ -51,6 +51,7 @@ def test_health(client):
 
 def test_create_engagement_produces_scored_scorecard(client):
     body = {"tenant_id": "t01", "engagement_id": "eng-t01-20260805-ab12", "mode": "on_demand",
+            "hitl_enabled": False,
             "scope": {"in_scope": ["10.0.0.0/24"], "sandbox_url": "http://sandbox:9999"}}
     r = client.post("/api/engagements", json=body)
     assert r.status_code == 200
@@ -69,16 +70,16 @@ def test_create_engagement_produces_scored_scorecard(client):
 
     ev = client.get("/api/engagements/eng-t01-20260805-ab12/evidence?verify=true").json()
     assert ev["count"] == 5 and ev["verified"] is True
-    assert [r["record_type"] for r in ev["records"]][0] == "engagement.planned"
+    assert next(r["record_type"] for r in ev["records"]) == "engagement.planned"
 
 
 def test_reject_bad_slug(client):
-    r = client.post("/api/engagements", json={"tenant_id": "t01", "engagement_id": "bad slug!"})
+    r = client.post("/api/engagements", json={"tenant_id": "t01", "hitl_enabled": False, "engagement_id": "bad slug!"})
     assert r.status_code == 400
 
 
 def test_list_and_404(client):
-    client.post("/api/engagements", json={"tenant_id": "t01", "engagement_id": "eng-t01-20260805-cd34"})
+    client.post("/api/engagements", json={"tenant_id": "t01", "hitl_enabled": False, "engagement_id": "eng-t01-20260805-cd34"})
     lst = client.get("/api/engagements?tenant_id=t01").json()
     assert any(e["engagement_id"] == "eng-t01-20260805-cd34" for e in lst)
     assert client.get("/api/engagements/does-not-exist").status_code == 404
