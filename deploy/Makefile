@@ -18,7 +18,7 @@ TEL_PROF := $(foreach p,$(PROFILES),--profile $(p))   # e.g. PROFILES=target bri
 OLLAMA_MODEL ?= qwen2.5-coder:7b
 export OLLAMA_MODEL                                   # so `docker compose` sees it for ${OLLAMA_MODEL} interpolation
 
-.PHONY: net dec-env ollama certs red-only blue-only telemetry lab up down logs ps config health clean help
+.PHONY: net dec-env ollama certs red-only blue-only telemetry lab up demo down logs ps config health clean help
 
 help:            ## list targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/ →/' | sort
@@ -67,6 +67,20 @@ up: net dec-env  ## P4: full loop (coordinator image must be built; telemetry is
 	$(DEC) $(DEC_PROF) up -d --wait
 	$(VIG) $(VIG_PROF) up -d --wait
 	@$(MAKE) health
+
+demo: net dec-env  ## ONE-SHOT full demo: (re)build+start coordinator/red/blue, then seed & verify EVERY console tab
+	@echo "[demo] 1/4  build + start coordinator (simulate · graph · dashboard) + ollama"
+	$(CO) up -d --build --wait
+	@echo "[demo] 2/4  start Decepticon (Neo4j KG)"
+	$(DEC) $(DEC_PROF) up -d --wait
+	@echo "[demo] 3/4  start Vigil (blue ingest)"
+	$(VIG) $(VIG_PROF) up -d --wait
+	@$(MAKE) --no-print-directory health
+	@echo "[demo] 4/4  seed + verify the end-to-end route"
+	@bash demo-seed.sh
+	@echo ""
+	@echo "  > Console:  http://localhost:8900/     (from your laptop:  ssh -L 8900:localhost:8900 <vm-host>)"
+	@echo "  > Optional heavy add — the real Wazuh sensor plane + DVWA:  make telemetry PROFILES=target"
 
 down:            ## stop everything, keep volumes
 	-$(CO) down
