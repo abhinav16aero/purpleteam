@@ -3,23 +3,24 @@
      Dual-rail shell · persistent global inspector · vertical loop spine. Real API first, badged demo fallback. -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>RedBlue AI · Meridian</title>
-<link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%230b0e15'/><path d='M32 10v44' stroke='%239d7ff0' stroke-width='3' stroke-linecap='round'/><circle cx='32' cy='22' r='5' fill='%23e05561'/><circle cx='32' cy='42' r='5' fill='%234f8ef0'/></svg>" />
+<title>RedBlue AI · Sovereign Purple-Team Console</title>
+<link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23242527'/><path d='M32 10v44' stroke='%2322c55e' stroke-width='3' stroke-linecap='round'/><circle cx='32' cy='22' r='5' fill='%23ef4444'/><circle cx='32' cy='42' r='5' fill='%233b82f6'/><circle cx='47' cy='32' r='4' fill='%2306b6d4'/></svg>" />
 <style>
 :root{
-  --bg:#090c12; --surface:#10151f; --surface-2:#161d2b; --surface-3:#1b2434; --hover:#1e2740; --raise:#121826;
-  --border:#232d40; --border-2:#2c3852; --hair:#1a2233;
-  --text:#dce4f1; --muted:#93a0b6; --faint:#616f88;
-  --red:#e05561; --red-dim:#d33940; --red-bg:#22141a; --red-bd:#48212a;
-  --blue:#4f8ef0; --blue-dim:#2f6fd0; --blue-bg:#111d31; --blue-bd:#264063;
-  --green:#35c46b; --green-dim:#1f9d4d; --green-bg:#0e2019; --green-bd:#1e442f;
-  --amber:#e0a340; --amber-dim:#b9791a; --amber-bg:#23190d; --amber-bd:#493719;
-  --violet:#9d7ff0; --violet-dim:#7a52c8; --violet-bg:#181430; --violet-bd:#332a57;
-  --accent:var(--violet); --accent-dim:var(--violet-dim); --cyan:#22b8cf;
+  /* Redamon "Swaraj Chakravyuh" design system — black-olive ground, green primary + cyan secondary */
+  --bg:#242527; --surface:#2a2b2e; --surface-2:#303135; --surface-3:#3a3b40; --hover:#303135; --raise:#202123;
+  --border:#34353b; --border-2:#45464d; --hair:#2b2c30;
+  --text:#e2e8f0; --muted:#a1a7b3; --faint:#6b7280;
+  --red:#ef4444; --red-dim:#dc2626; --red-bg:#2a1517; --red-bd:#5b2429;
+  --blue:#3b82f6; --blue-dim:#2563eb; --blue-bg:#13203a; --blue-bd:#274169;
+  --green:#22c55e; --green-dim:#16a34a; --green-bg:#0f2519; --green-bd:#1d5236;
+  --amber:#f59e0b; --amber-dim:#d97706; --amber-bg:#271a0b; --amber-bd:#5a3f17;
+  --violet:#8b5cf6; --violet-dim:#7c3aed; --violet-bg:#1c1733; --violet-bd:#37305e;
+  --accent:var(--green); --accent-dim:var(--green-dim); --cyan:#06b6d4;
   --r:10px; --r-lg:14px; --r-sm:7px;
   --sh:0 1px 2px rgba(0,0,0,.35); --sh-md:0 12px 30px -12px rgba(0,0,0,.6); --sh-pop:0 24px 64px -16px rgba(0,0,0,.72);
-  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,"Helvetica Neue",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Fira Sans","Helvetica Neue",sans-serif;
   --rail:66px; --panel:198px; --cmd:52px; --insp:346px;
 }
 :root[data-theme="light"]{
@@ -61,7 +62,7 @@ h1{font-size:21px}h2{font-size:16px}h3{font-size:13px}
 .railbtn.on::before{content:"";position:absolute;left:-12px;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
 .railbtn svg{width:19px;height:19px}
 .railsep{height:1px;width:26px;background:var(--hair);margin:5px 0}
-.railav{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:700;font-size:11px;color:#fff;background:linear-gradient(135deg,var(--violet-dim),var(--blue-dim));cursor:pointer}
+.railav{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:700;font-size:11px;color:#04140b;background:linear-gradient(135deg,var(--green),var(--cyan));cursor:pointer}
 
 #panel{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;min-width:0;overflow:hidden}
 .panel-h{padding:16px 16px 10px}
@@ -206,7 +207,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--hover)}tr.sel td{backgrou
 #gcanvas{display:block;width:100%;height:100%;cursor:grab}
 .gtools{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:6px}
 .gtools .icobtn{background:color-mix(in srgb,var(--surface) 90%,transparent);border:1px solid var(--border)}
-.gtools .icobtn.on{background:var(--violet-bg);color:var(--violet);border-color:var(--violet-bd)}
+.gtools .icobtn.on{background:color-mix(in srgb,var(--cyan) 16%,transparent);color:var(--cyan);border-color:color-mix(in srgb,var(--cyan) 40%,transparent)}
 .glegend{position:absolute;left:12px;bottom:12px;display:flex;gap:11px;flex-wrap:wrap;font-size:10.5px;color:var(--muted);background:color-mix(in srgb,var(--surface) 90%,transparent);border:1px solid var(--border);border-radius:8px;padding:7px 10px;max-width:64%}
 .glegend b{display:inline-flex;align-items:center;gap:5px;font-weight:500}.glegend i{width:9px;height:9px;border-radius:50%}
 .gmini{position:absolute;right:12px;bottom:12px;width:150px;height:100px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--surface) 92%,transparent);overflow:hidden}
@@ -271,7 +272,7 @@ function sparkPts(seed,n=24,base=.5,amp=.4){const r=seedRand(seed);const a=[];le
 async function api(path,opts){try{const r=await fetch(path,opts);if(!r.ok)return{ok:false,status:r.status};const ct=r.headers.get('content-type')||'';return{ok:true,data:ct.includes('json')?await r.json():await r.text()};}catch(e){return{ok:false,err:e.message};}}
 
 /* ============================ app state ============================ */
-const S={mode:localStorage.getItem('rb2_mode')||'DEMO',theme:localStorage.getItem('rb2_theme')||'dark',
+const S={mode:localStorage.getItem('rb2_mode')||'LIVE',theme:localStorage.getItem('rb2_theme')||'dark',
   railonly:localStorage.getItem('rb2_rail')==='1',route:'overview',params:{},group:'Main',coordUp:false,
   fg:null,es:null,timers:[],loop:null,sel:null};
 function clearTimers(){S.timers.forEach(clearInterval);S.timers=[];if(S.fg){S.fg.stop();S.fg=null;}if(S.es){S.es.close();S.es=null;}if(S.loop){S.loop.stop();S.loop=null;}if(S.mesh){S.mesh.stop();S.mesh=null;}}
@@ -314,14 +315,14 @@ const NODE_META={
  host:{c:'#0d9488',g:'H',lbl:'Host'},ip:{c:'#0d9488',g:'H'},asset:{c:'#0d9488',g:'A',lbl:'Asset'},server:{c:'#0d9488',g:'S',lbl:'Server'},
  container:{c:'#0891b2',g:'C',lbl:'Container'},database:{c:'#7c3aed',g:'D',lbl:'Database'},application:{c:'#2563eb',g:'A',lbl:'App'},
  domain:{c:'#1e40af',g:'D',lbl:'Domain'},identity:{c:'#a855f7',g:'I',lbl:'Identity'},user:{c:'#a855f7',g:'U',lbl:'User'},
- port:{c:'#0e7490',g:'P',lbl:'Port'},service:{c:'#22b8cf',g:'S',lbl:'Service'},
- vulnerability:{c:'#e05561',g:'!',lbl:'Vulnerability'},cve:{c:'#dc2626',g:'!',lbl:'CVE'},finding:{c:'#e05561',g:'F',lbl:'Finding'},
+ port:{c:'#0e7490',g:'P',lbl:'Port'},service:{c:'#06b6d4',g:'S',lbl:'Service'},
+ vulnerability:{c:'#ef4444',g:'!',lbl:'Vulnerability'},cve:{c:'#dc2626',g:'!',lbl:'CVE'},finding:{c:'#ef4444',g:'F',lbl:'Finding'},
  alert:{c:'#f97316',g:'A',lbl:'Alert'},incident:{c:'#dc2626',g:'I',lbl:'Incident'},ioc:{c:'#db2777',g:'◆',lbl:'IOC'},
  technique:{c:'#f97316',g:'✦',lbl:'Technique'},mitre:{c:'#f97316',g:'✦'},tactic:{c:'#ea580c',g:'T',lbl:'Tactic'},
- attack:{c:'#e05561',g:'⚔',lbl:'Attack'},agent:{c:'#9d7ff0',g:'✳',lbl:'AI Agent'},tool:{c:'#7a52c8',g:'⚙',lbl:'Tool'},
- sensor:{c:'#22b8cf',g:'◉',lbl:'Sensor'},evidence:{c:'#35c46b',g:'▤',lbl:'Evidence'},event:{c:'#4f8ef0',g:'●',lbl:'Event'},
+ attack:{c:'#ef4444',g:'⚔',lbl:'Attack'},agent:{c:'#8b5cf6',g:'✳',lbl:'AI Agent'},tool:{c:'#7a52c8',g:'⚙',lbl:'Tool'},
+ sensor:{c:'#06b6d4',g:'◉',lbl:'Sensor'},evidence:{c:'#22c55e',g:'▤',lbl:'Evidence'},event:{c:'#3b82f6',g:'●',lbl:'Event'},
  default:{c:'#616f88',g:'●',lbl:'Node'}};
-function nodeColor(n){if(n.kind==='technique'||n.kind==='mitre')return n.detected?'#35c46b':'#f97316';if(n.kind==='finding')return n.detected?'#35c46b':'#e05561';return (NODE_META[n.kind]||NODE_META.default).c;}
+function nodeColor(n){if(n.kind==='technique'||n.kind==='mitre')return n.detected?'#22c55e':'#f97316';if(n.kind==='finding')return n.detected?'#22c55e':'#ef4444';return (NODE_META[n.kind]||NODE_META.default).c;}
 
 /* ============================ icons ============================ */
 const _sv=p=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
@@ -368,6 +369,10 @@ const DATA={
  async graph(id){const d=await tryLive('/api/engagements/'+id+'/graph');if(d&&d.nodes&&d.nodes.length)return{data:d,src:'LIVE'};return{data:DEMO.graph(),src:'DEMO'};},
  async evidence(id){const d=await tryLive('/api/engagements/'+id+'/evidence?verify=true');if(d&&d.records)return{data:d,src:'LIVE'};return{data:DEMO.evidence(id),src:'SIMULATION'};},
  async evalReport(){const d=await tryLive('/api/eval/injection');if(d)return{data:d,src:'LIVE'};return{data:DEMO.eval,src:'SIMULATION'};},
+ async globalGraph(){const d=await tryLive('/api/graph');if(d&&d.nodes&&d.nodes.length)return{data:d,src:'LIVE'};return{data:DEMO.graph(),src:S.mode==='LIVE'?'DEGRADED':'DEMO'};},
+ async sensors(){const d=await tryLive('/api/sensors');if(d&&Array.isArray(d.sensors)&&d.sensors.length)return{data:d.sensors,src:'LIVE'};return{data:DEMO.sensors,src:S.mode==='LIVE'?'DEGRADED':'DEMO'};},
+ async mitre(){const d=await tryLive('/api/mitre');if(d&&d.techniques)return{data:d,src:'LIVE'};return{data:null,src:S.mode==='LIVE'?'DEGRADED':'DEMO'};},
+ async redAgents(){const d=await tryLive('/api/agents');if(d&&Array.isArray(d.runs))return{data:d,src:'LIVE'};return{data:null,src:S.mode==='LIVE'?'DEGRADED':'DEMO'};},
 };
 const DEMO=(()=>{
  const TGT='10.20.0.9',ENG='ENG-20260809-A1';
@@ -783,7 +788,7 @@ function inspectNode(n,g){
 }
 Object.assign(PAGES,{
  async graph(view,params){
-  const {data:g,src}=await DATA.graph(params&&params.id);
+  const {data:g,src}=(params&&params.id)?await DATA.graph(params.id):await DATA.globalGraph();
   const kinds=[...new Set(g.nodes.map(n=>n.kind))],rels=[...new Set(g.edges.map(e=>e.rel))];
   view.innerHTML=mhead('Knowledge Graph Explorer','Neo4j-backed attack graph — sanitized through the coordinator. Drag, lasso-select, trace shortest paths, isolate and expand neighborhoods.',badge(src))+
    `<div class="card pad" style="margin-bottom:14px"><div class="row">
@@ -1007,7 +1012,7 @@ Object.assign(PAGES,{
  },
  async roe(view){view.innerHTML=mhead('Rules of Engagement','The authorised scope and boundaries every engagement must respect.','<span class="tag green dot">RoE-2026-014</span>')+card('RoE-2026-014',`<div class="dl" style="grid-template-columns:auto 1fr"><dt>In scope</dt><dd style="text-align:left" class="mono">10.20.0.9 (DVWA)</dd><dt>Out of scope</dt><dd style="text-align:left" class="mono">everything else — hard boundary</dd><dt>Allowed</dt><dd style="text-align:left">recon · exploitation · validation in sandbox</dd><dt>Forbidden</dt><dd style="text-align:left">persistence · data destruction · cross-tenant</dd><dt>Kill switch</dt><dd style="text-align:left">any operator, halts all agents</dd><dt>Approved</dt><dd style="text-align:left">Security Operations · valid to Aug 31 2026</dd></div>`,{badge:badge('VERIFIED')});},
  async policies(view){view.innerHTML=mhead('Policies','Deterministic policy tiers decide what an AI agent may do autonomously.',badge(S.mode))+`<div class="grid g3">${card('AUTO tier','<div class="tag green dot" style="margin-bottom:8px">reversible</div><div class="muted" style="font-size:12px">enrich · tag · notify · query graph. Runs without a human.</div>')}${card('HUMAN tier','<div class="tag amber dot" style="margin-bottom:8px">high-impact</div><div class="muted" style="font-size:12px">isolate_host · block_ip · quarantine. Operator approval each time.</div>')}${card('NEVER-AUTO tier','<div class="tag red dot" style="margin-bottom:8px">control-plane</div><div class="muted" style="font-size:12px">cross-tenant · disable a control · alter RoE. Never automated.</div>')}</div>${card('Note','<div class="muted" style="font-size:12px">Policy evaluation is deterministic and logged to the evidence ledger. <b>DEV_MODE must be off before any exposure</b> — it bypasses Vigil auth.</div>',{badge:'<span class="tag amber dot">governance</span>'})}`;},
- async sensors(view){view.innerHTML=mhead('Sensors','Independent telemetry plane — the sensors observe effects, never red\'s intent.','<span class="tag green dot">all healthy</span>')+'<div class="grid g3">'+DEMO.sensors.map((s,i)=>sensorCard(s,i*7+3)).join('')+'</div>';},
+ async sensors(view){const {data:ss,src}=await DATA.sensors();const down=ss.filter(s=>s.status==='down').length;view.innerHTML=mhead('Sensors','Independent telemetry plane — the sensors observe effects, never red\'s intent.',badge(src)+' '+(down?`<span class="tag amber dot">${down} down</span>`:'<span class="tag green dot">nominal</span>'))+'<div class="grid g3">'+ss.map((s,i)=>sensorCard(s,i*7+3)).join('')+'</div>';},
  async syshealth(view){const up=DEMO.sensors.filter(s=>s.status==='healthy').length;view.innerHTML=mhead('System Health','Every component of the sovereign stack, with live resource sparklines.','<span class="tag green dot">nominal</span>')+`<div class="grid g4">${tile({lab:'Components Up',val:up+'/'+DEMO.sensors.length,tone:'green'})}${tile({lab:'Ingest Rate',val:'22.9k/min',tone:'blue',spark:sparkPts(3,24,.6,.2)})}${tile({lab:'Inference',val:'2.1s/turn',tone:'amber',delta:'CPU',dir:'f'})}${tile({lab:'Foreign Egress',val:'0 B',tone:'green'})}</div><div class="grid g3" style="margin-top:16px">${DEMO.sensors.map((s,i)=>sensorCard(s,i*5+9)).join('')}</div>`;},
  async network2(view){
   const chain=(title,tone,nodes)=>`<div class="card pad"><div class="up" style="margin-bottom:10px">${title}</div><div class="row" style="flex-wrap:nowrap;overflow-x:auto;gap:0">${nodes.map((n,i)=>`<div class="row" style="flex:none;gap:0"><div class="card pad" style="min-width:118px;text-align:center;border-color:var(--${tone}-bd)"><div class="glyph" style="margin:0 auto 6px;background:var(--${tone})">${n[1]}</div><b style="font-size:12px">${n[0]}</b><div class="faint" style="font-size:10px">${n[2]||''}</div></div>${i<nodes.length-1?`<div style="width:24px;height:2px;background:var(--${tone});flex:none"></div>`:''}</div>`).join('')}</div></div>`;

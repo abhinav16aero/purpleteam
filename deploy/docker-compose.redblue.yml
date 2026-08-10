@@ -54,6 +54,9 @@ services:
       - "8902:8902"     # /metrics (8901 reserved-unused — UI folds into Vigil console, doc 09)
     volumes:
       - coordinator_data:/data   # SQLite MVP store + hash-chained evidence (doc 08)
+      # Bind-mount the single-file console so UI edits need only a restart, not an image rebuild
+      # (the dashboard route reads dashboard.html at import). Read-only — the container never writes it.
+      - ../redblue-coordinator/redblue/api/static:/app/redblue/api/static:ro
     networks: [redblue-shared]
     # No depends_on — langgraph/backend live in OTHER Compose projects. Ordering is
     # Makefile-driven (--wait) and the coordinator retries with backoff (plan 07 §2.3).
