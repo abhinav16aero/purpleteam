@@ -583,7 +583,7 @@ function renderPal(q){q=q.toLowerCase();const res=(q?PAL.filter(x=>(x.t+x.sub).t
 
 /* ======================= GLOBAL EVENTS ======================= */
 document.addEventListener('click',e=>{
- const nav=e.target.closest('[data-nav]'); if(nav){go(nav.dataset.nav);return;}
+ const nav=e.target.closest('[data-nav]'); if(nav){go(nav.dataset.nav,nav.dataset.id?{id:nav.dataset.id}:null);return;}
  const pit=e.target.closest('.pitem'); if(pit){const r=$('#palr')._res[+pit.dataset.i];closePalette();closeDrawer();$('#scrim').classList.remove('on');r&&r.act();return;}
  const act=e.target.closest('[data-act]'); if(act){handleAct(act.dataset.act,act,e);return;}
 });
@@ -1056,6 +1056,73 @@ Object.assign(PAGES,{
    card('Ledger',`<table><thead><tr><th>Seq</th><th>Event</th><th>Actor</th><th>Verdict</th><th>Hash</th><th>Status</th></tr></thead><tbody>${(ev.records||[]).map(r=>`<tr><td class="mono">${r.seq}</td><td class="mono" style="font-size:12px">${r.record_type}</td><td>${r.actor}</td><td>${r.record_type.includes('gated')?pill('pending'):r.record_type.includes('response')?pill('approved'):'<span class="pill gray">recorded</span>'}</td><td class="mono faint">${(r.this_hash||'').slice(0,12)}…</td><td>${badge('VERIFIED')}</td></tr>`).join('')}</tbody></table>`,{badge:badge(src),actions:'<button class="btn sm">'+ic('dl')+' Export</button>'});
  },
 });
+function sensorCard(s,seed){return `<div class="card pad"><div class="row"><span class="node-glyph" style="background:${s.status==='healthy'?'var(--green)':'var(--amber)'}">${s.name[0]}</span><div><b>${s.name}</b><div class="faint" style="font-size:11px">${s.kind}</div></div><span class="grow"></span>${pill(s.status)}</div>
+ <div class="dl" style="margin-top:10px"><dt>Events</dt><dd>${s.eps}</dd><dt>Latency</dt><dd>${s.lat}</dd><dt>Heartbeat</dt><dd>${s.hb}</dd><dt>Errors</dt><dd style="color:${s.err?'var(--red)':'var(--green)'}">${s.err}</dd></div>
+ <div class="row" style="margin-top:10px;gap:12px"><div style="flex:1"><div class="faint" style="font-size:10px">CPU ${s.cpu}%</div>${sparkline(sparkPts(seed,20,s.cpu/100,.2),s.cpu>80?'amber':'blue',null,24)}</div><div style="flex:1"><div class="faint" style="font-size:10px">MEM ${s.mem}%</div>${sparkline(sparkPts(seed+1,20,s.mem/100,.15),'violet',null,24)}</div></div></div>`;}
+
+Object.assign(PAGES,{
+ async sensors(view){
+  view.innerHTML=sectionHead('Sensors','Independent telemetry plane — the sensors observe effects, never red\'s intent.','<span class="tag green dot">all healthy</span>')+
+   '<div class="grid g3">'+DEMO.sensors.map((s,i)=>sensorCard(s,i*7+3)).join('')+'</div>';
+ },
+ async syshealth(view){
+  const up=DEMO.sensors.filter(s=>s.status==='healthy').length;
+  view.innerHTML=sectionHead('System Health','Every component of the sovereign stack, with live resource sparklines.',up===DEMO.sensors.length?'<span class="tag green dot">all systems nominal</span>':'<span class="tag amber dot">degraded</span>')+
+   `<div class="grid g4">${kpi({lab:'Components Up',val:up+'/'+DEMO.sensors.length,tone:'green'})}${kpi({lab:'Ingest Rate',val:'22.9k/min',tone:'blue',spark:sparkPts(3,24,.6,.2)})}${kpi({lab:'Inference',val:'2.1s/turn',tone:'amber',delta:'CPU',deltaDir:'flat'})}${kpi({lab:'Foreign Egress',val:'0 B',tone:'green'})}</div>
+    <div class="grid g3" style="margin-top:16px">${DEMO.sensors.map((s,i)=>sensorCard(s,i*5+9)).join('')}</div>`;
+ },
+ async network(view){
+  const chain=(title,tone,nodes)=>`<div class="card pad"><div class="faint" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">${title}</div><div class="row" style="gap:0;flex-wrap:nowrap;overflow-x:auto">${nodes.map((n,i)=>`<div class="row" style="gap:0;flex:none"><div class="card pad" style="min-width:120px;text-align:center;border-color:var(--${tone}-bd)"><div class="node-glyph" style="margin:0 auto 6px;background:var(--${tone})">${n[1]}</div><b style="font-size:12px">${n[0]}</b><div class="faint" style="font-size:10px">${n[2]||''}</div></div>${i<nodes.length-1?`<div style="width:26px;height:2px;background:var(--${tone});flex:none"></div>`:''}</div>`).join('')}</div></div>`;
+  view.innerHTML=sectionHead('Sovereignty & Network','Both engines route inference through the on-prem local model layer. Zero foreign inference or data egress.','<span class="tag violet dot">SOVEREIGN MODE</span>')+
+   `<div class="grid g4" style="margin-bottom:16px">${[['Foreign API Egress','0','green'],['Model Location','Local','green'],['Inference','On-Prem','green'],['Data Residency','India','green']].map(([k,v,t])=>`<div class="card kpi"><div class="lab">${k}</div><div class="val" style="color:var(--${t});font-size:22px">${v}</div></div>`).join('')}</div>
+    <div class="col">
+     ${chain('Red path',' red',[['Decepticon','D','25 agents'],['LiteLLM','L','router'],['Ollama','O','runtime'],['Local Model','M','qwen2.5:7b']])}
+     ${chain('Blue path','blue',[['Vigil','V','13 agents'],['Bifrost','B','gateway'],['Ollama','O','runtime'],['Local Model','M','foundation-sec']])}
+    </div>
+    ${card('Network isolation',`<div class="row"><span class="tag green dot">range-net isolated</span><span class="tag green dot">no outbound to public internet</span><span class="tag green dot">egress firewall: DROP</span></div><div class="muted" style="font-size:12px;margin-top:10px">The attack range (10.20.0.0/24) is isolated. The only cross-boundary flow is sanitized graph/finding data to the coordinator — no model weights or telemetry leave the tenant.</div>`,{badge:'<span class="tag green">ACTIVE</span>'})}`;
+ },
+ async assets(view){
+  view.innerHTML=sectionHead('Assets','Every asset connects to its vulnerabilities, techniques, attacks and detections.',badge(S.mode))+
+   card('Assets',`<table><thead><tr><th>Asset</th><th>Type</th><th>IP</th><th>Criticality</th><th>Risk</th><th>Attacks</th><th>Detected</th><th></th></tr></thead><tbody>${DEMO.assets.map(a=>`<tr class="clk" data-as="${a.id}"><td><div class="row" style="gap:8px">${glyph(a.kind)}<b>${a.name}</b></div></td><td>${a.kind}</td><td class="mono">${a.ip}</td><td><span class="tag" style="color:${sevColor(a.crit)}">${a.crit}</span></td><td style="min-width:90px"><span class="bar"><i style="width:${a.risk}%;background:${a.risk>75?'var(--red)':'var(--amber)'}"></i></span></td><td class="mono">${a.attacks}</td><td class="mono" style="color:var(--green)">${a.detected}</td><td style="text-align:right"><button class="btn sm" data-nav="graph">graph</button></td></tr>`).join('')}</tbody></table>`,{badge:badge(S.mode)});
+  $$('#view tr.clk[data-as]').forEach(tr=>tr.onclick=e=>{if(e.target.closest('button'))return;const a=DEMO.assets.find(x=>x.id===tr.dataset.as);assetDrawer(a);});
+ },
+ async vulns(view){
+  const rows=[['CVE-2026-1207','SQL injection in DVWA sqli module','critical','web-server-01',9.8,'T1190',true],['CVE-2025-9911','OpenSSH auth bypass','high','web-server-01',8.1,'T1110',false],['CVE-2026-0455','containerd escape','high','k8s-payments',7.9,'T1611',false]];
+  view.innerHTML=sectionHead('Vulnerabilities','Vulnerabilities linked to the findings and techniques that exploit them.',badge(S.mode))+
+   card('Vulnerabilities',`<table><thead><tr><th></th><th>CVE</th><th>Description</th><th>Asset</th><th>CVSS</th><th>Technique</th><th>Exploited</th></tr></thead><tbody>${rows.map(r=>`<tr><td><div class="sev" style="background:${sevColor(r[2])};height:16px"></div></td><td class="mono">${r[0]}</td><td>${r[1]}</td><td>${r[3]}</td><td class="mono" style="color:${r[4]>=9?'var(--red)':'var(--amber)'}">${r[4]}</td><td class="mono">${r[5]}</td><td>${r[6]?pill('detected'):pill('missed')}</td></tr>`).join('')}</tbody></table>`,{badge:badge(S.mode)});
+ },
+ async models(view){
+  const models=[['qwen2.5:7b','Red team · tool-calling','7B','local · Ollama',true],['foundation-sec:8b','Blue team · analysis','8B','local · Ollama',true],['nomic-embed','Embeddings','137M','local · Ollama',true]];
+  view.innerHTML=sectionHead('Models','All inference is served by on-prem Ollama. No cloud model is configured.','<span class="tag green dot">EGRESS 0</span>')+
+   `<div class="grid g4" style="margin-bottom:16px">${[['Provider','Ollama'],['Location','On-Prem'],['Cloud keys','none'],['Egress','0 B']].map(([k,v])=>`<div class="card kpi"><div class="lab">${k}</div><div class="val" style="font-size:20px;color:var(--green)">${v}</div></div>`).join('')}</div>
+    ${card('Local models',`<table><thead><tr><th>Model</th><th>Role</th><th>Params</th><th>Serving</th><th>Status</th></tr></thead><tbody>${models.map(m=>`<tr><td class="mono">${m[0]}</td><td>${m[1]}</td><td class="mono">${m[2]}</td><td>${m[3]}</td><td>${pill('healthy')}</td></tr>`).join('')}</tbody></table>`,{badge:'<span class="tag violet dot">SOVEREIGN</span>'})}`;
+ },
+ async roe(view){
+  view.innerHTML=sectionHead('Rules of Engagement','The authorised scope and boundaries every engagement must respect.','<span class="tag green dot">RoE-2026-014</span>')+
+   card('RoE-2026-014',`<div class="dl" style="grid-template-columns:auto 1fr;gap:10px 18px"><dt>In scope</dt><dd style="text-align:left" class="mono">10.20.0.9 (DVWA)</dd><dt>Out of scope</dt><dd style="text-align:left" class="mono">everything else — hard boundary</dd><dt>Allowed</dt><dd style="text-align:left">recon · exploitation · validation in sandbox</dd><dt>Forbidden</dt><dd style="text-align:left">persistence · data destruction · cross-tenant</dd><dt>Kill switch</dt><dd style="text-align:left">available to any operator, halts all agents</dd><dt>Approved by</dt><dd style="text-align:left">Security Operations · valid to Aug 31 2026</dd></div>`,{badge:badge('VERIFIED')});
+ },
+ async policies(view){
+  view.innerHTML=sectionHead('Policies','Deterministic policy tiers decide what an AI agent may do autonomously.',badge(S.mode))+
+   `<div class="grid g3">
+     ${card('AUTO tier',`<div class="tag green dot" style="margin-bottom:8px">reversible</div><div class="muted" style="font-size:12px">enrich · tag · notify · open case · query graph. Runs without a human.</div>`)}
+     ${card('HUMAN tier',`<div class="tag amber dot" style="margin-bottom:8px">high-impact</div><div class="muted" style="font-size:12px">isolate_host · block_ip · quarantine. Requires operator approval every time.</div>`)}
+     ${card('NEVER-AUTO tier',`<div class="tag red dot" style="margin-bottom:8px">control-plane</div><div class="muted" style="font-size:12px">cross-tenant · disable a control · alter RoE. Never automated, ever.</div>`)}
+    </div>
+    ${card('Note',`<div class="muted" style="font-size:12px">Policy evaluation is deterministic and logged to the evidence ledger — the gate decision itself is auditable. <b>DEV_MODE must be off before any exposure</b>; it bypasses Vigil auth.</div>`,{badge:'<span class="tag amber dot">governance</span>'})}`;
+ },
+ async integrations(view){
+  const ints=[['Wazuh','SIEM / HIDS','connected','green'],['Suricata','NIDS','connected','green'],['Falco','Runtime security','connected','green'],['Neo4j','Knowledge graph','connected','green'],['Ollama','Local inference','connected','green'],['Grafana','Dashboards','connected','green'],['vigil-llm','Injection scanner','detect-only','amber']];
+  view.innerHTML=sectionHead('Integrations','The sovereign stack — all on-prem, all arm\'s-length from the coordinator.',badge(S.mode))+
+   '<div class="grid g3">'+ints.map(([n,d,st,t])=>`<div class="card pad"><div class="row"><span class="node-glyph" style="background:var(--${t})">${n[0]}</span><div><b>${n}</b><div class="faint" style="font-size:11px">${d}</div></div><span class="grow"></span><span class="tag ${t} dot">${st}</span></div></div>`).join('')+'</div>';
+ },
+});
+function assetDrawer(a){if(!a)return;openDrawer(`<div class="drawer-h">${glyph(a.kind)}<div><h2 style="font-size:14px">${a.name}</h2><div class="faint" style="font-size:11px">${a.kind} · ${a.ip}</div></div><span class="grow"></span><button class="icobtn" data-act="closedrawer">${ic('close')}</button></div>
+ <div class="drawer-b col"><div class="row"><span class="tag" style="color:${sevColor(a.crit)}">${a.crit}</span><span class="tag">risk ${a.risk}</span></div>
+  <div class="dl"><dt>IP</dt><dd>${a.ip}</dd><dt>OS</dt><dd>${a.os}</dd><dt>Owner</dt><dd>${a.owner}</dd></div>
+  <div><div class="faint" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Attack history</div><div class="row"><span class="tag red">${a.attacks} attacks</span><span class="tag green">${a.detected} detected</span><span class="tag amber">${a.attacks-a.detected} missed</span></div></div>
+  ${a.vulns.length?`<div><div class="faint" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Vulnerabilities</div>${a.vulns.map(v=>`<div class="mono" style="font-size:12px;padding:3px 0">${v}</div>`).join('')}</div>`:''}
+  <div><div class="faint" style="font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Related techniques</div>${a.techs.map(t=>`<span class="tag" style="margin:2px">${t}</span>`).join('')}</div>
+  <div class="col" style="gap:6px"><button class="btn sm" data-nav="attackpaths">${ic('route')} Trace attack path</button><button class="btn sm" data-nav="graph">${ic('network')} Show in graph</button><button class="btn sm" data-nav="incidents">${ic('alert')} Related findings</button></div></div>`);}
 /*__EXTRA_PAGES__*/
 
 /* ======================= BOOT ======================= */
