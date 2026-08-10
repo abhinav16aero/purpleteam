@@ -9,7 +9,7 @@ import { coordinatorApi, type Posture } from '../../../services/coordinatorApi'
 import { approvalsApi, aiDecisionsApi } from '../../../services/api'
 import type { ScreenProps } from '../../shared/types'
 
-interface Engagement { engagement_id: string; tenant_id?: string; status?: string; target?: string; detection_rate?: number | null }
+interface Engagement { engagement_id: string; tenant_id?: string; status?: string; target?: string | { name?: string; url?: string } | null; detection_rate?: number | null }
 interface Approval { id?: string; action_id?: string; action?: string; title?: string; risk?: string; status?: string }
 interface Decision { id?: string; decision_id?: string; action?: string; summary?: string; title?: string; status?: string; created_at?: string; timestamp?: string }
 
@@ -20,6 +20,11 @@ const asArray = <T,>(d: unknown, ...keys: string[]): T[] => {
   return []
 }
 const fmtSecs = (s: number | null | undefined) => (s == null ? '—' : s < 60 ? `${Math.round(s)}s` : `${Math.round(s / 60)}m`)
+// The coordinator returns `target` as an object ({name,url}) or {} — never render it raw as a React child.
+const targetText = (t: unknown): string =>
+  typeof t === 'string' ? t
+    : t && typeof t === 'object' ? ((t as { name?: string; url?: string }).name || (t as { url?: string }).url || '')
+      : ''
 
 const TONE: Record<string, string> = { red: '#e05561', blue: '#4f8ef0', green: '#35c46b', amber: '#e0a340', violet: '#9d7ff0' }
 
@@ -64,7 +69,7 @@ export default function OverviewScreen(props: ScreenProps) {
   const loop: [string, string, string, string][] = [
     ['red', 'RED TEAM', 'Decepticon', `${activeEng} running`],
     ['red', 'ATTACK', 'techniques', `${posture.totals.attacked} fired`],
-    ['red', 'TARGET', engagements[0]?.target || 'in-scope', 'authorised'],
+    ['red', 'TARGET', targetText(engagements[0]?.target) || 'in-scope', 'authorised'],
     ['blue', 'SENSORS', 'Wazuh·Suricata·Falco', 'telemetry'],
     ['blue', 'BLUE TEAM', 'Vigil', `${posture.totals.detected} detected`],
     ['green', 'COORDINATOR', 'LangGraph', 'scoring'],
@@ -135,7 +140,7 @@ export default function OverviewScreen(props: ScreenProps) {
                   {engagements.slice(0, 6).map((e) => (
                     <tr key={e.engagement_id} style={{ cursor: 'pointer', borderBottom: '1px solid var(--line-soft)' }} onClick={() => props.go('engagements')}>
                       <td style={{ padding: '8px 6px', fontFamily: 'var(--mono)', fontSize: 11.5 }}>{e.engagement_id}</td>
-                      <td style={{ padding: '8px 6px' }}>{e.target || '—'}</td>
+                      <td style={{ padding: '8px 6px' }}>{targetText(e.target) || '—'}</td>
                       <td style={{ padding: '8px 6px' }}><StatusPill status={e.status} /></td>
                       <td style={{ padding: '8px 6px', fontFamily: 'var(--mono)', textAlign: 'right' }}>{e.detection_rate != null ? `${Math.round(e.detection_rate * 100)}%` : '—'}</td>
                     </tr>

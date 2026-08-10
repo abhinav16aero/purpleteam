@@ -51,7 +51,13 @@ export const asArray = <T,>(d: unknown, ...keys: string[]): T[] => {
   return []
 }
 
-export interface EngRow { engagement_id: string; target?: string; status?: string }
+/** The coordinator returns engagement `target` as {name,url} (or {}); never render it as a raw React child. */
+export const targetText = (t: unknown): string =>
+  typeof t === 'string' ? t
+    : t && typeof t === 'object' ? ((t as { name?: string; url?: string }).name || (t as { url?: string }).url || '')
+      : ''
+
+export interface EngRow { engagement_id: string; target?: string | { name?: string; url?: string } | null; status?: string }
 
 /** Load the engagement list once and track a selection — shared by Evidence / Attack Paths / MITRE. */
 export function useEngagements() {
@@ -77,7 +83,7 @@ export function EngPicker({ list, sel, setSel }: { list: EngRow[]; sel: string; 
     <select value={sel} onChange={(e) => setSel(e.target.value)}
       style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--tx)', borderRadius: 8, padding: '6px 10px', fontSize: 12.5 }}>
       {list.length === 0 && <option value="">no engagements</option>}
-      {list.map((e) => <option key={e.engagement_id} value={e.engagement_id}>{e.engagement_id}{e.target ? ` · ${e.target}` : ''}</option>)}
+      {list.map((e) => <option key={e.engagement_id} value={e.engagement_id}>{e.engagement_id}{targetText(e.target) ? ` · ${targetText(e.target)}` : ''}</option>)}
     </select>
   )
 }

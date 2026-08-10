@@ -7,7 +7,7 @@ import { EmptyState } from '../../shared/ui'
 import { coordinatorApi, type RedRun } from '../../../services/coordinatorApi'
 import { agentsApi } from '../../../services/api'
 import type { ScreenProps } from '../../shared/types'
-import { Panel, Kpi, StatusPill, Tag, TONE, asArray } from '../redblue/kit'
+import { Panel, Kpi, StatusPill, Tag, TONE, asArray, targetText } from '../redblue/kit'
 
 interface BlueAgent { id?: string; agent_id?: string; name?: string; display_name?: string; role?: string; description?: string; status?: string; enabled?: boolean; model?: string }
 
@@ -72,7 +72,7 @@ export default function AiAgentsScreen(props: ScreenProps) {
                 {red.map((r) => (
                   <tr key={r.engagement_id} style={{ borderBottom: '1px solid var(--line-soft)', cursor: 'pointer' }} onClick={() => props.go('engagements')}>
                     <td style={{ padding: '8px 6px', fontFamily: 'var(--mono)', fontSize: 11.5 }}>{r.engagement_id}</td>
-                    <td style={{ padding: '8px 6px' }}>{r.target || '—'}</td>
+                    <td style={{ padding: '8px 6px' }}>{targetText(r.target) || '—'}</td>
                     <td style={{ padding: '8px 6px', color: 'var(--tx-3)' }}>{r.role}</td>
                     <td style={{ padding: '8px 6px', textAlign: 'right' }}><StatusPill status={r.status} /></td>
                   </tr>

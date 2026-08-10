@@ -61,7 +61,7 @@ export interface RedRun {
   tenant_id?: string
   status?: string
   thread_id?: string
-  target?: string
+  target?: string | { name?: string; url?: string } | null   // coordinator returns the engagement target OBJECT
   team: string
   role: string
 }
