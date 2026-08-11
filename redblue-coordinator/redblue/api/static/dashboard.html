@@ -712,7 +712,7 @@ function mountGraph(canvas,data,opts){
  function step(){const vn=nodes.filter(vis);
   for(let i=0;i<vn.length;i++)for(let k=i+1;k<vn.length;k++){const a=vn[i],b=vn[k];let dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy||1,d=Math.sqrt(d2),f=alpha*2200/d2;a.vx+=dx/d*f;a.vy+=dy/d*f;b.vx-=dx/d*f;b.vy-=dy/d*f;}
   links.forEach(l=>{if(!vis(l.s)||!vis(l.t))return;let dx=l.t.x-l.s.x,dy=l.t.y-l.s.y,d=Math.sqrt(dx*dx+dy*dy)||1,f=alpha*(d-80)*0.045;l.s.vx+=dx/d*f;l.s.vy+=dy/d*f;l.t.vx-=dx/d*f;l.t.vy-=dy/d*f;});
-  vn.forEach(n=>{if(n===drag)return;n.vx+=(W/2-n.x)*0.0015*alpha;n.vy+=(H/2-n.y)*0.0015*alpha;n.x+=n.vx;n.y+=n.vy;n.vx*=0.86;n.vy*=0.86;});
+  vn.forEach(n=>{if(n===drag||n.pinned)return;n.vx+=(W/2-n.x)*0.0015*alpha;n.vy+=(H/2-n.y)*0.0015*alpha;n.x+=n.vx;n.y+=n.vy;n.vx*=0.86;n.vy*=0.86;});
   if(alpha>0.03)alpha*=0.993;}
  function render(){ctx.setTransform(DPR,0,0,DPR,0,0);ctx.clearRect(0,0,W,H);ctx.save();ctx.translate(tx,ty);ctx.scale(scale,scale);
   const anchor=hover||sel;let hi=null;if(anchor){hi=new Set([anchor.id]);adj[anchor.id].forEach(id=>hi.add(id));}
@@ -720,6 +720,7 @@ function mountGraph(canvas,data,opts){
    ctx.strokeStyle=onP?'var(--accent)':on?'rgba(140,155,185,.28)':'rgba(120,135,165,.06)';ctx.lineWidth=(onP?2.2:on?1.1:.5)/scale;ctx.beginPath();ctx.moveTo(l.s.x,l.s.y);ctx.lineTo(l.t.x,l.t.y);ctx.stroke();});
   nodes.forEach(n=>{if(!vis(n))return;const on=!hi||hi.has(n.id),r=rad(n);ctx.globalAlpha=on?1:0.14;ctx.fillStyle=nodeColor(n);
    if(isDia(n)){ctx.save();ctx.translate(n.x,n.y);ctx.rotate(.785);ctx.beginPath();ctx.rect(-r,-r,2*r,2*r);ctx.fill();ctx.restore();}else{ctx.beginPath();ctx.arc(n.x,n.y,r,0,6.283);ctx.fill();}
+   if(n.pinned){ctx.strokeStyle='var(--cyan)';ctx.lineWidth=1.8/scale;ctx.beginPath();ctx.arc(n.x,n.y,r+1.8,0,6.283);ctx.stroke();}
    if(pathSet.has(n.id)){ctx.globalAlpha=1;ctx.strokeStyle='var(--accent)';ctx.lineWidth=2.4/scale;ctx.beginPath();ctx.arc(n.x,n.y,r+3.5,0,6.283);ctx.stroke();}
    if(selSet.has(n)){ctx.globalAlpha=1;ctx.strokeStyle='var(--violet)';ctx.lineWidth=2/scale;ctx.beginPath();ctx.arc(n.x,n.y,r+2.5,0,6.283);ctx.stroke();}
    if(n===sel){ctx.globalAlpha=1;ctx.strokeStyle='#fff';ctx.lineWidth=2/scale;ctx.beginPath();ctx.arc(n.x,n.y,r+3,0,6.283);ctx.stroke();}
@@ -753,8 +754,10 @@ function mountGraph(canvas,data,opts){
   if(lasso){const r={x0:Math.min(lasso.x0,lasso.x1),y0:Math.min(lasso.y0,lasso.y1),x1:Math.max(lasso.x0,lasso.x1),y1:Math.max(lasso.y0,lasso.y1)};
    nodes.forEach(n=>{if(!vis(n))return;const s=world(0,0),p={x:n.x*scale+tx,y:n.y*scale+ty};if(p.x>=r.x0&&p.x<=r.x1&&p.y>=r.y0&&p.y<=r.y1)selSet.add(n);});lasso=null;opts.onMulti&&opts.onMulti(selSet.size);return;}
   if(!moved){const h=hit(mx,my);
-   if(tool==='path'&&h){pathPick.push(h.id);if(pathPick.length===2){const p=bfs(pathPick[0],pathPick[1]);pathSet=new Set(p||[]);pathEdges=new Set();if(p)for(let i=0;i<p.length-1;i++)pathEdges.add(p[i]+'>'+p[i+1]);opts.onPath&&opts.onPath(p);pathPick=[];}else opts.onPath&&opts.onPath(null,true);}
+   if(h&&e.shiftKey){h.pinned=!h.pinned;h.vx=h.vy=0;alpha=Math.max(alpha,.3);opts.onSelect&&opts.onSelect(h,{nodes,byId,adj});}
+   else if(tool==='path'&&h){pathPick.push(h.id);if(pathPick.length===2){const p=bfs(pathPick[0],pathPick[1]);pathSet=new Set(p||[]);pathEdges=new Set();if(p)for(let i=0;i<p.length-1;i++)pathEdges.add(p[i]+'>'+p[i+1]);opts.onPath&&opts.onPath(p);pathPick=[];}else opts.onPath&&opts.onPath(null,true);}
    else{sel=h;opts.onSelect&&opts.onSelect(h,{nodes,byId,adj});}}
+  else if(drag){drag.pinned=true;drag.vx=drag.vy=0;}
   drag=null;pan=null;canvas.style.cursor=tool==='lasso'?'crosshair':'grab';};
  window.addEventListener('mouseup',up);
  canvas.ondblclick=e=>{const bx=canvas.getBoundingClientRect(),h=hit(e.clientX-bx.left,e.clientY-bx.top);if(!h)return;
@@ -764,7 +767,7 @@ function mountGraph(canvas,data,opts){
  return {
   stop:()=>{stop=true;cancelAnimationFrame(raf);window.removeEventListener('mouseup',up);},
   fit:()=>{const vn=nodes.filter(vis);if(!vn.length)return;let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;vn.forEach(n=>{x0=Math.min(x0,n.x);y0=Math.min(y0,n.y);x1=Math.max(x1,n.x);y1=Math.max(y1,n.y);});const s=clamp(Math.min(W/((x1-x0)||1),H/((y1-y0)||1))*0.82,.25,2);scale=s;tx=W/2-((x0+x1)/2)*s;ty=H/2-((y0+y1)/2)*s;},
-  reset:()=>{nodes.forEach(n=>{n._f=n._c=n._i=n._s=false;});selSet.clear();pathSet.clear();pathEdges.clear();pathPick=[];sel=null;scale=1;tx=0;ty=0;alpha=1;opts.onSelect&&opts.onSelect(null);},
+  reset:()=>{nodes.forEach(n=>{n._f=n._c=n._i=n._s=false;n.pinned=false;});selSet.clear();pathSet.clear();pathEdges.clear();pathPick=[];sel=null;scale=1;tx=0;ty=0;alpha=1;opts.onSelect&&opts.onSelect(null);},
   zoom:f=>{const w=world(W/2,H/2);scale=clamp(scale*f,.25,3.5);tx=W/2-w.x*scale;ty=H/2-w.y*scale;},
   focus:id=>{const n=byId[id];if(n){sel=n;hover=n;scale=1.4;tx=W/2-n.x*scale;ty=H/2-n.y*scale;opts.onSelect&&opts.onSelect(n,{nodes,byId,adj});}},
   setTool:t=>{tool=t;pathPick=[];canvas.style.cursor=t==='lasso'?'crosshair':'grab';},
@@ -773,6 +776,7 @@ function mountGraph(canvas,data,opts){
   isolate:()=>{if(!sel){nodes.forEach(n=>n._i=false);return;}const keep=new Set([sel.id]);adj[sel.id].forEach(id=>keep.add(id));nodes.forEach(n=>n._i=!keep.has(n.id));},
   clearIso:()=>nodes.forEach(n=>n._i=false),
   clearSel:()=>{selSet.clear();sel=null;pathSet.clear();pathEdges.clear();pathPick=[];opts.onSelect&&opts.onSelect(null);},
+  releasePins:()=>{let c=0;nodes.forEach(n=>{if(n.pinned){n.pinned=false;c++;}});alpha=Math.max(alpha,.5);return c;},
  };
 }
 function inspectNode(n,g){
@@ -801,11 +805,12 @@ Object.assign(PAGES,{
      <div class="row" style="margin-top:8px"><span class="faint" id="g_status">${g.nodes.length} nodes · ${g.edges.length} relationships</span></div></div>
     <div class="card" style="padding:0;overflow:hidden"><div class="gwrap" id="gwrap" style="height:calc(100vh - 300px);min-height:520px">
        <canvas id="gcanvas"></canvas>
-       <div class="ghint" id="g_hint">drag · scroll zoom · click a node</div>
+       <div class="ghint" id="g_hint">drag to pin · shift-click to unpin · scroll to zoom</div>
        <div class="gtools">
          <button class="icobtn" id="g_in" title="Zoom in">+</button><button class="icobtn" id="g_out" title="Zoom out">−</button><button class="icobtn" id="g_fit" title="Fit">${ic('target')}</button>
          <button class="icobtn" id="g_lasso" title="Lasso multi-select">${ic('lasso')}</button>
          <button class="icobtn" id="g_path" title="Shortest path (pick two)">${ic('route')}</button>
+         <button class="icobtn" id="g_pins" title="Release pinned nodes — drag a node to pin it in place, shift-click to unpin">${ic('lock')}</button>
          <button class="icobtn" id="g_full" title="Fullscreen">${ic('full')}</button></div>
        <div class="glegend" id="glegend"></div>
        <div class="gmini"><canvas id="gmini"></canvas></div>
@@ -824,7 +829,8 @@ Object.assign(PAGES,{
   $('#g_in').onclick=()=>ctl.zoom(1.2);$('#g_out').onclick=()=>ctl.zoom(.83);$('#g_fit').onclick=()=>ctl.fit();
   $('#g_iso').onclick=()=>{ctl.isolate();toast('Isolated selection — Reset to restore');};
   $('#g_lasso').onclick=()=>{const on=$('#g_lasso').classList.toggle('on');$('#g_path').classList.remove('on');ctl.setTool(on?'lasso':'pan');$('#g_hint').textContent=on?'drag a box to multi-select':'drag · scroll zoom · click a node';};
-  $('#g_path').onclick=()=>{const on=$('#g_path').classList.toggle('on');$('#g_lasso').classList.remove('on');ctl.setTool(on?'path':'pan');$('#g_hint').textContent=on?'pick two nodes for shortest path':'drag · scroll zoom · click a node';};
+  $('#g_path').onclick=()=>{const on=$('#g_path').classList.toggle('on');$('#g_lasso').classList.remove('on');ctl.setTool(on?'path':'pan');$('#g_hint').textContent=on?'pick two nodes for shortest path':'drag to pin · shift-click to unpin · scroll to zoom';};
+  $('#g_pins').onclick=()=>{const c=ctl.releasePins();toast(c?('Released '+c+' pinned node'+(c===1?'':'s')):'No pinned nodes','green');};
   $('#g_full').onclick=()=>{const w=$('#gwrap');if(!document.fullscreenElement&&w.requestFullscreen)w.requestFullscreen().catch(()=>{});else if(document.exitFullscreen)document.exitFullscreen();};
  },
  async attackpaths(view){
