@@ -1,0 +1,44 @@
+--- a/frontend/src/redesign/data/data.ts
++++ b/frontend/src/redesign/data/data.ts
+@@ -16,6 +16,7 @@
+   | 'overview'
+   | 'posture'
+   | 'engagements'
++  | 'reconmap'
+   | 'knowledgegraph'
+   | 'aiagents'
+   | 'aisafety'
+@@ -54,6 +55,7 @@
+   ['sparkle', 'Command Center', 'overview'],
+   ['shield', 'RedBlue Posture', 'posture'],
+   ['bolt', 'Engagements', 'engagements'],
++  ['graph', 'Recon Map', 'reconmap'],
+   ['flow', 'Knowledge Graph', 'knowledgegraph'],
+   ['bot', 'AI Agents', 'aiagents'],
+   ['lock', 'AI Safety', 'aisafety'],
+@@ -120,6 +122,7 @@
+   overview: ['Command Center', 'Live purple-team posture, engagements, approvals and AI activity'],
+   posture: ['RedBlue Posture', 'Attacked-vs-detected coverage, MTTD and false-negative gaps'],
+   engagements: ['Engagements', 'Launch and monitor scoped red-team engagements'],
++  reconmap: ['Recon Map', 'Recon graph, live pipeline logs and scorecard analysis'],
+   knowledgegraph: ['Knowledge Graph', 'Neo4j attack graph — assets, techniques, findings, detections, evidence'],
+   aiagents: ['AI Agents', 'Blue-team agents, red-team runs and the coordinator'],
+   aisafety: ['AI Safety', 'Red-team-of-the-AI evaluation results — hijack, injection, canary, grounding'],
+--- a/frontend/src/redesign/SocConsole.tsx
++++ b/frontend/src/redesign/SocConsole.tsx
+@@ -42,6 +42,7 @@
+ import MitreScreen from './screens/mitre/MitreScreen'
+ import EvidenceScreen from './screens/evidence/EvidenceScreen'
+ import SovereigntyScreen from './screens/sovereignty/SovereigntyScreen'
++import ReconMapScreen from './screens/recon/ReconMapScreen'
+ import { VigilMark, VigilLogo } from './shared/VigilLogo'
+ 
+ const SCREENS: Record<ScreenKey, (props: ScreenProps) => JSX.Element> = {
+@@ -55,6 +56,7 @@
+   overview: OverviewScreen,
+   posture: PostureScreen,
+   engagements: EngagementsScreen,
++  reconmap: ReconMapScreen,
+   knowledgegraph: KnowledgeGraphScreen,
+   aiagents: AiAgentsScreen,
+   aisafety: AiSafetyScreen,

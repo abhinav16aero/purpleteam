@@ -1,0 +1,98 @@
+1) Full repo — staged (you commit)
+
+.gitignore updated (removed the 3 engine excludes; venvs/node_modules/.env/certs stay ignored), vigil's 3 submodules vendored as files. Staged: 3,018 files · ~65 MB · 0 real secrets · 0 venv/node_modules. You're on main; when you've eyeballed it:
+git status                 # review
+git commit -m "Vendor engines + RedBlue coordinator/console/telemetry (self-contained repo)"
+git push                   # to your server remote
+
+2) Full server turn-on (on the Shakti GPU host)
+
+cd ~/purpleteam/deploy
+# ── one-time host prep ──
+make net                                    #
+make certs                                  # Wazuh TLS (once)
+sudo sysctl -w vm.max_map_count=262144      #
+docker run --rm --gpus all nvidia/cuda:12.4.0-base nvidia-smi   # confirm GPU visible to Docker
+
+# ── red brain (GPU) + point both engines at it ──
+export OLLAMA_MODEL=qwen2.5:14b
+make ollama GPU=1                           # GPU Ollama + pull the model
+sed -i 's#^OLLAMA_MODEL=.*#OLLAMA_MODEL='"$OLLenv
+
+# ── bring up the whole stack ──
+make up GPU=1                               # coordinator + Decepticon(red) + Vigil(blue) + health
+make telemetry PROFILES="target full"       # WA + OpenSearch UI
+
+# ── the console UI (no compose service; run t
+cd ../vigil/frontend && npm install && npm run dev     # serves the RedBlue console on :6988
+(For an instant pre-seeded demo instead of a ls the KG + scores without waiting on red.)
+
+3) Dashboards to watch — SSH-tunnel then open
+
+ssh -L 6988:localhost:6988 -L 6987:localhost:6
+    -L 3001:localhost:3001 -L 8443:localhost:8443 \
+    -L 7474:localhost:7474 -L 7687:localhost:7
+    -L 7474:localhost:7474 -L 7687:localhost:7687 \
+    -L 3100:localhost:3100 -L 3103:localhost:3
+    -L 16686:localhost:16686 -L 9095:localhost:9095  <you>@<shakti-host>
+
+┌──────────────────┬────────────────┬─────────────────────────────────────────────────────────────────────────────────┐
+│       URL        │   Dashboard    │         you watch                                  │
+├──────────────────┼────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+│                  │ RedBlue        │ All 12 Rr · Engagements (launch → plan-review HITL │
+│ localhost:6988   │ Console        │  → approve → live SSE timeline) · Knowledge Graph · Posture · MITRE · Approvals │
+│                  │ (Vigil) ← main │  · Evide· Attack Paths · Sovereignty + Vigil SOC   │
+│                  │                │ (Findings, Cases, Decisions, Analytics)                                         │
+├──────────────────┼────────────────┼────────────────────────────────────────────────────┤
+│                  │                │ Posture metrics (detection rate, MTTD, ATT&CK coverage) — import                │
+│ localhost:3001   │ Grafana        │ deploy/ojson, datasource Prometheus :9095 (make    │
+│                  │                │ posture-dashboard)                                                              │
+├──────────────────┼────────────────┼────────────────────────────────────────────────────┤
+│ localhost:8443   │ Wazuh          │ Raw Wazuh / Suricata / Falco alerts (needs PROFILES=full)                       │
+│                  │ Dashboard      │                                                    │
+├──────────────────┼────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+│ localhost:7474   │ Neo4j Browser  │ Raw atta4j / decepticon-graph)                     │
+├──────────────────┼────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+│ localhost:3100   │ Decepticon Web │ Red-team                                           │
+├──────────────────┼────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+│ localhost:8900   │ Coordinator    │ /api/heatAPI)                                      │
+│                  │ API            │                                                                                 │
+├──────────────────┼────────────────┼────────────────────────────────────────────────────┤
+│ localhost:16686  │ Jaeger ·       │ Vigil agent traces · raw metrics                                                │
+│ · :9095          │ Prometheus     │                                                    │
+
+
+
+
+
+Fix — kill the stale tunnel, then reconnect on offset local ports (no need to stop RedAmon)
+
+kill 3245046 2>/dev/null            # drop the leftover 6987 tunnel
+
+ssh  -L 16988:localhost:6988 \       # RedBlue Console  → open http://localhost:16988
+     -L 16987:localhost:6987 \       # Vigil backend
+     -L 18900:localhost:8900 \       # Coordinator API  → http://localhost:18900/docs
+     -L 13001:localhost:3001 \       # Grafana
+     -L 18443:localhost:8443 \       # Wazuh dashboard
+     -L 17474:localhost:7474 -L 17687:localhost:7687 \   # Neo4j (remote)
+     -L 13100:localhost:3100 -L 13103:localhost:3103 \   # Decepticon web/terminal
+     -L 26686:localhost:16686 -L 19095:localhost:9095 \  # Jaeger / Prometheus
+     abhinav@172.16.118.127
+
+Then in your browser use the 1-prefixed ports:
+
+┌─────────────────────────────┬─────────────────────────────────────────┐
+│            Open             │                Dashboard                │
+├─────────────────────────────┼─────────────────────────────────────────┤
+│ http://localhost:16988      │ RedBlue Console (main — all 12 screens) │
+├─────────────────────────────┼─────────────────────────────────────────┤
+│ http://localhost:13001      │ Grafana (posture)                       │
+├─────────────────────────────┼─────────────────────────────────────────┤
+│ http://localhost:18443      │ Wazuh dashboard                         │
+├─────────────────────────────┼─────────────────────────────────────────┤
+│ http://localhost:18900/docs │ Coordinator API                         │
+├─────────────────────────────┼─────────────────────────────────────────┤
+│ http://localhost:13100      │ Decepticon web                          │
+├─────────────────────────────┼─────────────────────────────────────────┤
+│ http://localhost:17474      │ Neo4j browser                           │
+└─────────────────────────────┴─────────────────────────────────────────┘

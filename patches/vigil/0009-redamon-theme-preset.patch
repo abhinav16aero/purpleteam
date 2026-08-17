@@ -1,0 +1,36 @@
+--- a/frontend/src/redesign/shell/accent.ts
++++ b/frontend/src/redesign/shell/accent.ts
+@@ -6,6 +6,7 @@
+   cyan: ['#28a9bd', '#45c2d4'],
+   emerald: ['#3aab74', '#54c08c'],
+   coral: ['#e2705f', '#ec8a7b'],
++  redamon: ['#22c55e', '#06b6d4'],
+ }
+ 
+ /** preset swatches shown in the tweaks panel, in order */
+@@ -14,6 +15,7 @@
+   { key: 'cyan', color: '#28a9bd' },
+   { key: 'emerald', color: '#3aab74' },
+   { key: 'coral', color: '#e2705f' },
++  { key: 'redamon', color: '#22c55e' },
+ ]
+ 
+ /** normalize "#abc" / "abc" / "aabbcc" -> "#aabbcc"; null if invalid */
+--- a/frontend/src/redesign/shell/bg.ts
++++ b/frontend/src/redesign/shell/bg.ts
+@@ -11,6 +11,7 @@
+   ink: '#08090c',
+   navy: '#0b1020',
+   espresso: '#14110d',
++  redamon: '#0d0d0f',
+   light: '#f4f5f7',
+ }
+ 
+@@ -20,6 +21,7 @@
+   { key: 'ink', color: '#08090c' },
+   { key: 'navy', color: '#0b1020' },
+   { key: 'espresso', color: '#14110d' },
++  { key: 'redamon', color: '#0d0d0f' },
+   { key: 'light', color: '#f4f5f7' },
+ ]
+ 

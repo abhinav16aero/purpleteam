@@ -1,0 +1,176 @@
+import type { GraphNode, GlowLevel } from './types'
+import {
+  NODE_COLORS,
+  SEVERITY_COLORS_VULN,
+  SEVERITY_COLORS_CVE,
+  NODE_SIZES,
+  SEVERITY_SIZE_MULTIPLIERS,
+  GOAL_FINDING_TYPES,
+  GOAL_FINDING_COLORS,
+  CLUSTER_SIZE,
+  DETECTION_COLORS,
+  DETECTION_TINT_TYPES,
+} from './config'
+
+const HOSTNAME_NODE_TYPES = new Set([
+  'Domain',
+  'Subdomain',
+  'Host',
+  'Hostname',
+])
+
+const IP_NODE_TYPES = new Set(['IP', 'IPAddress', 'IpAddress'])
+
+/** http(s) URL check — replaces webapp's @/lib/url-utils isHttpUrl */
+export const isHttpUrl = (v: unknown): v is string =>
+  typeof v === 'string' && /^https?:\/\//i.test(v.trim())
+
+/**
+ * Build a browser-openable URL from a node type + name pair, or null if it
+ * isn't web-addressable. https for hostnames, http for IPs, pass-through if
+ * the name already includes a scheme.
+ */
+export const getUrlForTypeName = (type: string, name: string | null | undefined): string | null => {
+  const trimmed = (name || '').trim()
+  if (!trimmed) return null
+  if (isHttpUrl(trimmed)) return trimmed
+  if (HOSTNAME_NODE_TYPES.has(type)) return `https://${trimmed}`
+  if (IP_NODE_TYPES.has(type)) return `http://${trimmed}`
+  return null
+}
+
+/**
+ * Build a browser-openable URL for an Endpoint node by combining its `baseurl`
+ * with its `path` (or using `full_url` directly), or null if it isn't openable.
+ */
+const getEndpointUrl = (props: Record<string, unknown>, name: string): string | null => {
+  const nameMethod = (name || '').trim().split(/\s+/)[0]?.toUpperCase()
+  const method = (typeof props.method === 'string' ? props.method : nameMethod || '').toUpperCase()
+  if (method && method !== 'GET') return null
+
+  if (isHttpUrl(props.full_url)) return props.full_url
+
+  const base = typeof props.baseurl === 'string' ? props.baseurl.trim().replace(/\/$/, '') : ''
+  if (!isHttpUrl(base)) return null
+
+  let path = typeof props.path === 'string' ? props.path : ''
+  if (!path) {
+    // Derive the path from the name: "GET /transactions/123" -> "/transactions/123"
+    const parts = (name || '').trim().split(/\s+/)
+    path = parts.length > 1 ? parts.slice(1).join(' ') : ''
+  }
+  if (path && !path.startsWith('/')) path = `/${path}`
+  return `${base}${path}`
+}
+
+/**
+ * Build a browser-openable URL for a node, or null if it's not web-addressable.
+ * Prefers an explicit `url`/`endpoint`/`href` property, then handles Endpoint
+ * nodes (baseurl + path), then derives one from the node type + name.
+ */
+export const getNodeUrl = (node: GraphNode): string | null => {
+  const props = node.properties || {}
+  const candidates = [props.url, props.endpoint, props.href]
+  for (const c of candidates) {
+    if (isHttpUrl(c)) return c
+  }
+  if (node.type === 'Endpoint') return getEndpointUrl(props, node.name)
+  return getUrlForTypeName(node.type, node.name)
+}
+
+/**
+ * Get the severity level from a node's properties
+ */
+export const getNodeSeverity = (node: GraphNode): string => {
+  return (node.properties?.severity as string)?.toLowerCase() || 'unknown'
+}
+
+/**
+ * Check if a ChainFinding node represents a goal/outcome (exploit success, access gained, etc.)
+ */
+export const isGoalFinding = (node: GraphNode): boolean => {
+  if (node.type !== 'ChainFinding') return false
+  const findingType = (node.properties?.finding_type as string || '').toLowerCase()
+  return GOAL_FINDING_TYPES.has(findingType)
+}
+
+/**
+ * Get node color based on type and severity
+ */
+export const getNodeColor = (node: GraphNode): string => {
+  if (node.isCluster && node.clusterColor) return node.clusterColor
+  if (node.type === 'Vulnerability') {
+    const severity = getNodeSeverity(node)
+    return SEVERITY_COLORS_VULN[severity] || SEVERITY_COLORS_VULN.unknown
+  }
+  if (node.type === 'CVE') {
+    const severity = getNodeSeverity(node)
+    return SEVERITY_COLORS_CVE[severity] || SEVERITY_COLORS_CVE.unknown
+  }
+  // Purple-team detection tint: technique/finding nodes flagged by the scorecard
+  if (DETECTION_TINT_TYPES.has(node.type)) {
+    const detected = node.properties?.detected
+    if (typeof detected === 'boolean') {
+      return detected ? DETECTION_COLORS.detected : DETECTION_COLORS.missed
+    }
+  }
+  // Goal ChainFindings get green (active color - canvas overrides for inactive)
+  if (isGoalFinding(node)) {
+    return GOAL_FINDING_COLORS.active
+  }
+  return NODE_COLORS[node.type] || NODE_COLORS.Default
+}
+
+/**
+ * Get node size multiplier based on type and severity
+ */
+export const getNodeSize = (node: GraphNode): number => {
+  if (node.isCluster) {
+    const count = node.clusterChildren?.length ?? 0
+    // log10(count) scales gracefully: 30 -> ~1.5, 100 -> 2, 1000 -> 3
+    const scaled = CLUSTER_SIZE.base + CLUSTER_SIZE.perDecade * Math.log10(Math.max(count, 1))
+    return Math.min(scaled, CLUSTER_SIZE.max)
+  }
+  const baseSize = NODE_SIZES[node.type] || NODE_SIZES.Default
+
+  if (node.type === 'Vulnerability' || node.type === 'CVE') {
+    const severity = getNodeSeverity(node)
+    const severityMultiplier = SEVERITY_SIZE_MULTIPLIERS[severity] || 1.0
+    return baseSize * severityMultiplier
+  }
+
+  return baseSize
+}
+
+/**
+ * Check if a node should have glow effect (critical/high severity)
+ * Returns: false, 'high', or 'critical'
+ */
+export const getGlowLevel = (node: GraphNode): GlowLevel => {
+  // ExploitGvm and ChainFinding nodes always glow (confirmed compromise)
+  if (node.type === 'ExploitGvm' || node.type === 'ChainFinding') return 'critical'
+  if (node.type === 'Vulnerability' || node.type === 'CVE') {
+    const severity = getNodeSeverity(node)
+    if (severity === 'critical') return 'critical'
+    if (severity === 'high') return 'high'
+  }
+  return false
+}
+
+/**
+ * Check if a node is a high-severity vulnerability or CVE
+ */
+export const isHighSeverityNode = (node: GraphNode): boolean => {
+  // ExploitGvm and ChainFinding nodes are always high-severity (confirmed compromise)
+  if (node.type === 'ExploitGvm' || node.type === 'ChainFinding') return true
+  if (node.type !== 'Vulnerability' && node.type !== 'CVE') return false
+  const severity = getNodeSeverity(node)
+  return severity === 'critical' || severity === 'high'
+}
+
+/**
+ * Check if any nodes in the data have high severity
+ */
+export const hasHighSeverityNodes = (nodes: GraphNode[]): boolean => {
+  return nodes.some(isHighSeverityNode)
+}
